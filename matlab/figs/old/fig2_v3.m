@@ -1,0 +1,807 @@
+%{
+    fig2, 
+    the comparison at pose level
+
+    1. single cell level correlation
+    2. embedding level correlation
+    3. compare differences
+%}
+clear all
+close all
+addpath(genpath(pwd))
+%% set path
+rootpath = ['E:\MTPM_body_language'];
+
+beh_video_path = [rootpath,'\raw_data\behavior_all'];
+
+bea_path = [beh_video_path,'\BeA_path'];
+
+process_tpm_path = [rootpath,...
+    '\raw_data\tpm_suite2p\process'];
+
+beh_neu_path = [rootpath,'\beh_neu_20240412'];
+%% load data
+fileFolder = fullfile(beh_neu_path);
+dirOutput = dir(fullfile(fileFolder,'*pose*-cebra.mat'));
+cebraNames = {dirOutput.name}';
+
+cebra_cell = cell(size(cebraNames,1),13);
+cebra_cell(:,1) = cebraNames;
+
+smo_win = 60;
+
+for k = 1:size(cebra_cell,1)
+    tempdata = load([beh_neu_path,'\',cebraNames{k}]);
+    cebra_cell{k,2} = tempdata.cebra;
+    cebra_cell(k,3:10) = split(cebra_cell{k,1},'-');
+    cebra_cell{k,11} = cebra_cell{k,5}(2:end);
+
+    labelname = [cebra_cell{k,1}(1:(end-10)),'.mat'];
+
+    templabel = load([beh_neu_path,'\',labelname]);
+
+    neuname = [...
+        cebra_cell{k,3},'-',...
+        cebra_cell{k,4},'-',...
+        cebra_cell{k,5},'-',...
+        cebra_cell{k,6},'-',...
+        cebra_cell{k,7},'-neu.mat',...
+        ];
+
+    tempneu = load([beh_neu_path,'\',neuname]);
+
+    if strcmp(cebra_cell{k,8},'pose')
+        temppose = templabel.coords3d;
+        for m = 1:size(temppose,2)
+            temppose(:,m) = smooth(...
+                templabel.coords3d(:,m),smo_win);
+        end
+        cebra_cell{k,12} = temppose;
+        cebra_cell{k,13} = tempneu.dff_smo_Fc';
+    end
+    disp(k)
+end
+
+dist_cell = cell(size(cebra_cell,1),3);
+for k = 1:size(cebra_cell,1)
+    distname = [...
+        cebra_cell{k,3},'-',...
+        cebra_cell{k,4},'-',...
+        cebra_cell{k,5},'-',...
+        cebra_cell{k,6},'-',...
+        cebra_cell{k,7},'-',...
+        'distance','-',...
+        cebra_cell{k,9},'.mat'...
+        ];
+    tempdata = load([beh_neu_path,'\',distname]);
+
+    dist_cell(k,:) = tempdata.dist_data;
+    disp(k)
+end
+%% plot canvas
+hall = figure(1);
+set(hall,'Position',[680,0,800,800])
+set(hall,'color','white');
+%% calculate the correlations between poses and neurons
+corr_thres = 0.2;
+
+corr_pose_neu_cell = cell(size(cebra_cell,1),2);
+for k = 1:size(cebra_cell,1)
+    %% load data
+    temppose = cebra_cell{k,12};
+    tempneu = cebra_cell{k,13};
+    %% calculate the correlations
+    [r,p] = corr(temppose,tempneu);
+    %% select significant neurons
+    selidx = ((p<0.05) .* (abs(r)>corr_thres))==1;
+    selr = r(selidx);
+
+    selidx_neu = sum(selidx)>0;
+    % %% temp show
+    % hist(selr,128)
+    % title(cebra_cell{k,1})
+    % xlabel(sum(selidx_neu)./length(selidx_neu))
+    % pause
+    %% append data
+    corr_pose_neu_cell{k,1} = [...
+        sum(selidx_neu),size(r,2),...
+        sum(selidx_neu)/size(r,2)];
+    corr_pose_neu_cell{k,2} = selidx_neu;
+end
+
+%% show the correlations across each brain area and individual
+start_x = 0.61;
+start_y = 0.8;
+
+box_x = 0.12;
+box_y = 0.18;
+
+setcolor = cbrewer2('Spectral',11);
+mouse_tpm_c = setcolor(3,:);
+mouse_free_c = setcolor(9,:);
+
+mouse_overlap = setcolor(1,:);
+
+show_mice_name = {'Self','Partner'};
+
+show_list = {...
+    'tpm','tpmss',mouse_tpm_c;...
+    'free','tpmss',mouse_free_c;...
+    'tpm','tpmpfc',mouse_tpm_c;...
+    'free','tpmpfc',mouse_free_c;...
+    'tpm','tpmm',mouse_tpm_c;...
+    'free','tpmm',mouse_free_c};
+
+show_xtick = {...
+    'S1','dmPFC','M1'};
+
+xlist = [1,2,4,5,7,8];
+
+cap_size = 2;
+
+line_w = 0.25;
+
+mk_size = 2;
+
+x_bias = 0.4;
+
+stat_mat = zeros(5,size(show_list,1));
+
+subplot('Position',[start_x,start_y,box_x,box_y])
+% bar errorbar
+
+legend_cell = cell(size(show_list,1),1);
+
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_cell(selidx,1));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    mean_sel_corr = mean(sel_corr(:,3));
+    std_sel_corr = std(sel_corr(:,3))./sqrt(size(sel_corr,1));
+    legend_cell{k,1} = bar(xlist(k),mean_sel_corr,...
+        'FaceColor',show_list{k,3},...
+        'LineWidth',line_w);
+    hold on
+    errorbar(xlist(k),mean_sel_corr,std_sel_corr,...
+        'Color','k','CapSize',cap_size,...
+        'LineWidth',line_w)
+    hold on
+end
+hold on
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_cell(selidx,1));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    if rem(k,2) == 1
+        selidx1 = strcmp(cebra_cell(:,9),show_list{k+1,1});
+        selidx2 = strcmp(cebra_cell(:,11),show_list{k+1,2});
+    
+        selidx = selidx1&selidx2;
+    
+        sel_corr_2 = cell2mat(corr_pose_neu_cell(selidx,1));
+
+        for m = 1:size(sel_corr,1)
+            plot(x_bias+[xlist(k),xlist(k+1)],...
+                [sel_corr(m,3),sel_corr_2(m,3)],...
+                '-k','LineWidth',line_w)
+            hold on
+        end
+    end
+    plot(x_bias+xlist(k)*ones(size(sel_corr(:,3))),sel_corr(:,3),...
+        'o','LineWidth',line_w,...
+        'MarkerEdgeColor','k',...
+        'MarkerFaceColor','w',...
+        'MarkerSize',mk_size)
+    hold on
+end
+hold off
+
+box off
+set(gca,'XTick',(xlist(1:2:end)+xlist(2:2:end))/2)
+set(gca,'TickDir','out')
+set(gca,'XTickLabel',show_xtick)
+set(gca,'XTickLabelRotation',0)
+ylabel('Neural pose correlation ratio')
+set(gca,'FontSize',6)
+legend([legend_cell{1},legend_cell{2}],show_mice_name,...
+    'Box','off','Location','northwest')
+axis([0.3,8.7,0,1])
+title('All')
+
+%% close correlation
+corr_pose_neu_close_cell = cell(size(cebra_cell,1),1);
+for k = 1:size(cebra_cell,1)
+    %% load data
+    temppose = cebra_cell{k,12}(dist_cell{k,2}==1,:);
+    tempneu = cebra_cell{k,13}(dist_cell{k,2}==1,:);
+    %% calculate the correlations
+    [r,p] = corr(temppose,tempneu);
+    %% select significant neurons
+    selidx = ((p<0.05) .* (abs(r)>corr_thres))==1;
+    selr = r(selidx);
+
+    selidx_neu = sum(selidx)>0;
+    % %% temp show
+    % hist(selr,128)
+    % title(cebra_cell{k,1})
+    % xlabel(sum(selidx_neu)./length(selidx_neu))
+    % pause
+    %% append data
+    corr_pose_neu_close_cell{k,1} = [...
+        sum(selidx_neu),size(r,2),...
+        sum(selidx_neu)/size(r,2)];
+end
+%% far correlation
+corr_pose_neu_far_cell = cell(size(cebra_cell,1),1);
+for k = 1:size(cebra_cell,1)
+    %% load data
+    temppose = cebra_cell{k,12}(dist_cell{k,2}==0,:);
+    tempneu = cebra_cell{k,13}(dist_cell{k,2}==0,:);
+    %% calculate the correlations
+    [r,p] = corr(temppose,tempneu);
+    %% select significant neurons
+    selidx = ((p<0.05) .* (abs(r)>corr_thres))==1;
+    selr = r(selidx);
+
+    selidx_neu = sum(selidx)>0;
+    % %% temp show
+    % hist(selr,128)
+    % title(cebra_cell{k,1})
+    % xlabel(sum(selidx_neu)./length(selidx_neu))
+    % pause
+    %% append data
+    corr_pose_neu_far_cell{k,1} = [...
+        sum(selidx_neu),size(r,2),...
+        sum(selidx_neu)/size(r,2)];
+end
+%% show the close correlations across each brain area and individual
+start_x = 0.74;
+start_y = 0.8;
+
+box_x = 0.12;
+box_y = 0.18;
+
+setcolor = cbrewer2('Spectral',11);
+mouse_tpm_c = setcolor(3,:);
+mouse_free_c = setcolor(9,:);
+
+show_mice_name = {'Self','Partner'};
+
+show_list = {...
+    'tpm','tpmss',mouse_tpm_c;...
+    'free','tpmss',mouse_free_c;...
+    'tpm','tpmpfc',mouse_tpm_c;...
+    'free','tpmpfc',mouse_free_c;...
+    'tpm','tpmm',mouse_tpm_c;...
+    'free','tpmm',mouse_free_c};
+
+show_xtick = {...
+    'S1','dmPFC','M1'};
+
+xlist = [1,2,4,5,7,8];
+
+cap_size = 2;
+
+line_w = 0.25;
+
+mk_size = 2;
+
+x_bias = 0.4;
+
+stat_mat = zeros(5,size(show_list,1));
+
+subplot('Position',[start_x,start_y,box_x,box_y])
+% bar errorbar
+
+legend_cell = cell(size(show_list,1),1);
+
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_close_cell(selidx,:));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    mean_sel_corr = mean(sel_corr(:,3));
+    std_sel_corr = std(sel_corr(:,3))./sqrt(size(sel_corr,1));
+    legend_cell{k,1} = bar(xlist(k),mean_sel_corr,...
+        'FaceColor',show_list{k,3},...
+        'LineWidth',line_w);
+    hold on
+    errorbar(xlist(k),mean_sel_corr,std_sel_corr,...
+        'Color','k','CapSize',cap_size,...
+        'LineWidth',line_w)
+    hold on
+end
+hold on
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_close_cell(selidx,:));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    if rem(k,2) == 1
+        selidx1 = strcmp(cebra_cell(:,9),show_list{k+1,1});
+        selidx2 = strcmp(cebra_cell(:,11),show_list{k+1,2});
+    
+        selidx = selidx1&selidx2;
+    
+        sel_corr_2 = cell2mat(corr_pose_neu_close_cell(selidx,:));
+
+        for m = 1:size(sel_corr,1)
+            plot(x_bias+[xlist(k),xlist(k+1)],...
+                [sel_corr(m,3),sel_corr_2(m,3)],...
+                '-k','LineWidth',line_w)
+            hold on
+        end
+    end
+    plot(x_bias+xlist(k)*ones(size(sel_corr(:,3))),sel_corr(:,3),...
+        'o','LineWidth',line_w,...
+        'MarkerEdgeColor','k',...
+        'MarkerFaceColor','w',...
+        'MarkerSize',mk_size)
+    hold on
+end
+hold off
+
+box off
+set(gca,'XTick',(xlist(1:2:end)+xlist(2:2:end))/2)
+set(gca,'TickDir','out')
+set(gca,'XTickLabel',show_xtick)
+set(gca,'XTickLabelRotation',0)
+set(gca,'YTickLabel',[])
+set(gca,'FontSize',6)
+axis([0.3,8.7,0,1])
+title('Close')
+%% show the far correlations across each brain area and individual
+start_x = 0.87;
+start_y = 0.8;
+
+box_x = 0.12;
+box_y = 0.18;
+
+setcolor = cbrewer2('Spectral',11);
+mouse_tpm_c = setcolor(3,:);
+mouse_free_c = setcolor(9,:);
+
+show_mice_name = {'Self','Partner'};
+
+show_list = {...
+    'tpm','tpmss',mouse_tpm_c;...
+    'free','tpmss',mouse_free_c;...
+    'tpm','tpmpfc',mouse_tpm_c;...
+    'free','tpmpfc',mouse_free_c;...
+    'tpm','tpmm',mouse_tpm_c;...
+    'free','tpmm',mouse_free_c};
+
+show_xtick = {...
+    'S1','dmPFC','M1'};
+
+xlist = [1,2,4,5,7,8];
+
+cap_size = 2;
+
+line_w = 0.25;
+
+mk_size = 2;
+
+x_bias = 0.4;
+
+stat_mat = zeros(5,size(show_list,1));
+
+subplot('Position',[start_x,start_y,box_x,box_y])
+% bar errorbar
+
+legend_cell = cell(size(show_list,1),1);
+
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_far_cell(selidx,:));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    mean_sel_corr = mean(sel_corr(:,3));
+    std_sel_corr = std(sel_corr(:,3))./sqrt(size(sel_corr,1));
+    legend_cell{k,1} = bar(xlist(k),mean_sel_corr,...
+        'FaceColor',show_list{k,3},...
+        'LineWidth',line_w);
+    hold on
+    errorbar(xlist(k),mean_sel_corr,std_sel_corr,...
+        'Color','k','CapSize',cap_size,...
+        'LineWidth',line_w)
+    hold on
+end
+hold on
+for k = 1:size(show_list,1)
+    %%
+    selidx1 = strcmp(cebra_cell(:,9),show_list{k,1});
+    selidx2 = strcmp(cebra_cell(:,11),show_list{k,2});
+
+    selidx = selidx1&selidx2;
+
+    sel_corr = cell2mat(corr_pose_neu_far_cell(selidx,:));
+
+    stat_mat(:,k) = sel_corr(:,3);
+    %% show
+    if rem(k,2) == 1
+        selidx1 = strcmp(cebra_cell(:,9),show_list{k+1,1});
+        selidx2 = strcmp(cebra_cell(:,11),show_list{k+1,2});
+    
+        selidx = selidx1&selidx2;
+    
+        sel_corr_2 = cell2mat(corr_pose_neu_far_cell(selidx,:));
+
+        for m = 1:size(sel_corr,1)
+            plot(x_bias+[xlist(k),xlist(k+1)],...
+                [sel_corr(m,3),sel_corr_2(m,3)],...
+                '-k','LineWidth',line_w)
+            hold on
+        end
+    end
+    plot(x_bias+xlist(k)*ones(size(sel_corr(:,3))),sel_corr(:,3),...
+        'o','LineWidth',line_w,...
+        'MarkerEdgeColor','k',...
+        'MarkerFaceColor','w',...
+        'MarkerSize',mk_size)
+    hold on
+end
+hold off
+
+box off
+set(gca,'XTick',(xlist(1:2:end)+xlist(2:2:end))/2)
+set(gca,'TickDir','out')
+set(gca,'XTickLabel',show_xtick)
+set(gca,'XTickLabelRotation',0)
+set(gca,'YTickLabel',[])
+set(gca,'FontSize',6)
+axis([0.3,8.7,0,1])
+title('Far')
+%% show the position distribution of all the cells
+pos_dist_cell = cell(size(cebra_cell,1),1);
+
+var_thres = 1;
+for k = 1:size(cebra_cell,1)
+    %%
+    tempneu = cebra_cell{k,13};
+    var_neu_mat = ones(size(tempneu,1),1)*std(tempneu);
+    thres_neu_mat = var_neu_mat*var_thres;
+    
+    fire_neu_idx = tempneu>thres_neu_mat;
+    %% temp show
+    % figure
+    % for m = 1:size(tempneu,2)
+    %     plot(tempneu(:,m),'b-')
+    %     hold on
+    %     plot(fire_neu_idx(:,m),'r-')
+    %     hold off
+    %     pause
+    % end
+    %% fire_save_list
+    forward_diff_neu_idx = diff(...
+        [zeros(1,size(fire_neu_idx,2));fire_neu_idx]);
+    backward_diff_neu_idx = diff(...
+        [fire_neu_idx;zeros(1,size(fire_neu_idx,2))]);
+    
+    savelist_cell = cell(size(forward_diff_neu_idx,2),1);
+
+    for m = 1:size(savelist_cell,1)
+        tempidx1 = forward_diff_neu_idx(:,m);
+        tempidx2 = backward_diff_neu_idx(:,m);
+        start_pos = find(tempidx1==1);
+        end_pos = find(tempidx2==-1);
+        savelist_cell{m,1} = [start_pos,end_pos];
+    end
+
+    %% append data
+    pos_dist_cell{k,1} = savelist_cell;
+end
+%% show position related firing
+start_x = 0.01;
+start_y = 0.8;
+
+box_x = 0.182;
+box_y = box_x;
+
+inter_x = 0.005;
+
+show_pos_brain = {...
+    'S1','dmPFC','M1'};
+
+show_list = {...
+    'tpm','free','tpmss',[-220,330,-140,410];...
+    'tpm','free','tpmpfc',[-230,260,-210,230];...
+    'tpm','free','tpmm',[-240,210,-320,160]...
+    };
+
+mk_size = 4;
+
+sel_mouse_idx = 3;
+
+for k = 1:length(show_pos_brain)
+    %% load data
+    tpm_selidx = strcmp(show_list{k,1},cebra_cell(:,9))&...
+        strcmp(show_list{k,3},cebra_cell(:,11));
+    free_selidx = strcmp(show_list{k,2},cebra_cell(:,9))&...
+        strcmp(show_list{k,3},cebra_cell(:,11));
+
+    tpm_cebra_cell = cebra_cell(tpm_selidx,:);
+    free_cebra_cell = cebra_cell(free_selidx,:);
+
+    tpm_pos_dist_cell = pos_dist_cell(tpm_selidx,:);
+    free_pos_dist_cell = pos_dist_cell(free_selidx,:);
+
+    tpm_dist_cell = dist_cell(tpm_selidx,:);
+    free_dist_cell = dist_cell(free_selidx,:);
+
+    tpm_corr_pose_neu_cell = ...
+        corr_pose_neu_cell(tpm_selidx,:);
+    free_corr_pose_neu_cell = ...
+        corr_pose_neu_cell(free_selidx,:);
+
+
+    tpm_pos_mat = cell(size(tpm_pos_dist_cell,1),1);
+    for m = sel_mouse_idx%1%:size(tpm_pos_dist_cell,1)
+        tempsavelist = cell2mat(...
+            tpm_pos_dist_cell{m,1}(tpm_corr_pose_neu_cell{m,2},:));
+        temppose = tpm_cebra_cell{m,12}(:,1:3);
+        tempdist = tpm_dist_cell{m,2};
+        selpose = temppose(tempsavelist(:,1),:);
+        seldist = tempdist(tempsavelist(:,1),:);
+        tpm_pos_mat{m,:} = [selpose,seldist];
+    end
+    tpm_pos_mat = cell2mat(tpm_pos_mat);
+
+    free_pos_mat = cell(size(free_pos_dist_cell,1),1);
+    for m = sel_mouse_idx%1%:size(free_pos_dist_cell,1)
+        tempsavelist = cell2mat(...
+            free_pos_dist_cell{m,1}(free_corr_pose_neu_cell{m,2},:));
+        temppose = free_cebra_cell{m,12}(:,1:3);
+        tempdist = free_dist_cell{m,2};
+        selpose = temppose(tempsavelist(:,1),:);
+        seldist = tempdist(tempsavelist(:,1),:);
+        free_pos_mat{m,:} = [selpose,seldist];
+    end
+    free_pos_mat = cell2mat(free_pos_mat);
+    %% random selection
+    sel_num = 1000;
+    rng(1234)
+    tpm_rand_selidx = randi(size(tpm_pos_mat,1),[sel_num,1]);
+    % sel_tpm_pos_mat = tpm_pos_mat(tpm_rand_selidx,:);
+    sel_tpm_pos_mat = tpm_pos_mat;
+    rng(1234)
+    free_rand_selidx = randi(size(free_pos_mat,1),[sel_num,1]);
+    % sel_free_pos_mat = free_pos_mat(free_rand_selidx,:);
+    sel_free_pos_mat = free_pos_mat;
+
+    show_data_list = [...
+        sel_tpm_pos_mat(:,1:3);...
+        sel_free_pos_mat(:,1:3)];
+
+    show_clr_list = [...
+        ones(size(sel_tpm_pos_mat,1),1)*mouse_tpm_c;...
+        ones(size(sel_free_pos_mat,1),1)*mouse_free_c...
+        ];
+
+    overlap_idx = [...
+        sel_tpm_pos_mat(:,4);...
+        sel_free_pos_mat(:,4)...
+        ]==1;
+    show_clr_list(overlap_idx,:) = ...
+        ones(sum(overlap_idx,1),1)*mouse_overlap;
+    %% show
+    subplot('Position',[...
+        start_x+(k-1)*(box_x+inter_x),...
+        start_y,box_x,box_y])
+
+    scatter3(...
+        show_data_list(:,1),...
+        show_data_list(:,2),...
+        show_data_list(:,3),...
+        mk_size*ones(size(show_data_list,1),1),...
+        show_clr_list,...
+        'filled','MarkerFaceAlpha',0.5);
+
+    view(2)
+    box on
+    axis(show_list{k,end})
+    title(show_pos_brain{k})
+    set(gca,'FontSize',6)
+    set(gca,'XTick',[],'YTick',[])
+end
+%% separate close and far to discuss the information delivering
+%% information delivering
+
+%% cebra analysis
+%% split the close and far
+start_x = 0.03;
+start_y = 0.5;
+
+box_x = 0.182;
+box_y = box_x;
+
+inter_x = 0.001;
+inter_y = 0.001;
+
+show_row_list = {...
+    'free';'tpm'};
+
+show_col_list = {...
+    'tpmss';'tpmpfc';'tpmm'};
+
+close_far_cmap = cbrewer2('RdBu',4);
+close_far_cmap = [close_far_cmap(1,:);close_far_cmap(end,:)];
+
+for m = 1:size(show_col_list,1)
+    for n = 1:size(show_row_list,1)
+        %% select data
+        tempcol = show_col_list{m,1};
+        temprow = show_row_list{n,1};
+
+        selcolidx = strcmp(tempcol,cebra_cell(:,11));
+        selrowidx = strcmp(temprow,cebra_cell(:,9));
+
+        selidx = selcolidx&selrowidx;
+
+        sel_cebra_cell = cebra_cell(selidx,:);
+
+        sel_dist_cell = dist_cell(selidx,:);
+        
+        %% show
+        subplot('Position',[...
+            start_x+(m-1)*(box_x+inter_x),...
+            start_y-(n-1)*(box_y+inter_y),...
+            box_x,box_y])
+        for k = 1:size(sel_cebra_cell,1)
+            %%
+            tempcebra = sel_cebra_cell{k,2};
+            tempdist = sel_dist_cell{k,2};
+            %% create cmaplist
+            cmaplist = zeros(size(tempcebra,1),3);
+            cmaplist(tempdist==1,:) = ...
+            ones(sum(tempdist),1)*close_far_cmap(1,:);
+            cmaplist(tempdist==0,:) = ...
+            ones(sum(tempdist==0),1)*close_far_cmap(2,:);
+            %% show
+            scatter3(...
+                tempcebra(:,1),...
+                tempcebra(:,2),...
+                tempcebra(:,3),...
+                1*ones(size(tempcebra,1),1),...
+                cmaplist,'filled')
+            hold on
+        end
+        hold off
+    end
+end
+%% show the space distance
+start_x = 0.03;
+start_y = 0.3;
+
+box_x = 0.182;
+box_y = box_x;
+
+inter_x = 0.001;
+inter_y = 0.001;
+
+show_col_list = {...
+    'tpmss';'tpmpfc';'tpmm'};
+
+for k = 1:size(show_col_list,1)
+    %% select data
+    sel_col_idx = strcmp(...
+        show_col_list{k},cebra_cell(:,11));
+
+    sel_cebra_cell = cebra_cell(sel_col_idx,:);
+
+    tempallname = cell(size(sel_cebra_cell,1),1);
+    for m = 1:size(tempallname,1)
+        tempallname{m,1} = [...
+            sel_cebra_cell{m,3},'-',...
+            sel_cebra_cell{m,4},'-',...
+            sel_cebra_cell{m,5},'-',...
+            sel_cebra_cell{m,6},'-',...
+            sel_cebra_cell{m,7},'-',...
+            sel_cebra_cell{m,8}];
+    end
+
+    temp_unique_name = unique(tempallname);
+    %% calculate cebra distance
+    cebra_dist = cell(size(temp_unique_name,1),1);
+    for m = 1:size(cebra_dist,1)
+        tempname = temp_unique_name{m,1};
+        selidx = strcmp(tempname,tempallname);
+
+        tt_cebra = sel_cebra_cell(selidx,2);
+
+        tempcebradist = (tt_cebra{1}-tt_cebra{2});
+        cebra_dist{m,1} = tempcebradist;
+        figure
+        plot3(tempcebradist(:,1),tempcebradist(:,2),tempcebradist(:,3))
+    end
+    %% show
+    
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

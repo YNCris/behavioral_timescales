@@ -1,0 +1,73 @@
+%{
+    show neural modulation
+    far close far
+    + close far 
+%}
+clear all
+close all
+addpath(genpath(pwd))
+%% set path
+rootpath = ['H:\MTPM_body_language'];
+
+beh_video_path = [rootpath,'\raw_data\behavior_op_20250915'];
+
+bea_path = [beh_video_path,'\BeA_path'];
+
+sep_tpm_path = [rootpath,...
+    '\raw_data\tpm_suite2p\sep'];
+
+beh_neu_path = [rootpath,'\beh_neu_20250918'];
+%% load data
+fileFolder = fullfile(beh_neu_path);
+dirOutput = dir(fullfile(fileFolder,'*-neu.mat'));
+neuNames = {dirOutput.name}';
+
+splnames = split(neuNames,'-neu.mat');
+rootNames = splnames(:,1);
+
+splnames = split(rootNames,'-');
+%% select data
+sel_brain_name = '10tpmpfc';
+
+selidx = strcmp(splnames(:,3),sel_brain_name);
+
+sel_rootNames = rootNames(selidx,:);
+
+%% load data
+tif_cell = cell(size(sel_rootNames,1),1);
+for k = 1:size(tif_cell,1)
+    %%
+    tempfolder = [sel_rootNames{k},'-tpm'];
+    dirOutput = dir(fullfile(sep_tpm_path,tempfolder,'*.tif'));
+
+    tif_name = dirOutput.name;
+
+    stack = loadtiff(fullfile(sep_tpm_path,tempfolder,tif_name));
+
+    tif_cell{k,1} = stack;
+end
+
+%% calculate mean frame
+mean_frame_cell = cellfun(@(x) mean(double(x),3),...
+    tif_cell,'UniformOutput',false);
+
+dff_frame_cell = cellfun(@(x,y) mat2gray(double(x)-y),...
+    tif_cell,mean_frame_cell,'UniformOutput',false);
+
+dff_max_cell = cellfun(@(x) max(dff_frame_cell,[]),...
+    tif_cell,mean_frame_cell,'UniformOutput',false);
+%% temp show
+for k = 1:1000
+    subplot(121)
+    imshow(dff_frame_cell{1}(:,:,k))
+    subplot(122)
+    imshow(dff_frame_cell{2}(:,:,k))
+    pause(0.0000001)
+end
+
+
+
+
+
+
+

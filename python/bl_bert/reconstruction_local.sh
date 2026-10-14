@@ -1,0 +1,23 @@
+#!/bin/bash
+
+cd /home/yhan/code/python/cebra_body_language
+
+
+#python self_seq_tpmss_across_animals_reconstruction.py
+#python self_seq_tpmpfc_across_animals_reconstruction.py
+#python self_seq_tpmm_across_animals_reconstruction.py
+python self_pose_tpmss_across_animals_reconstruction.py
+python self_pose_tpmpfc_across_animals_reconstruction.py
+python self_pose_tpmm_across_animals_reconstruction.py
+#python self_beh-mod_tpmss_across_animals_reconstruction.py
+#python self_beh-mod_tpmpfc_across_animals_reconstruction.py
+#python self_beh-mod_tpmm_across_animals_reconstruction.py
+#python partner_seq_tpmss_across_animals_reconstruction.py
+#python partner_seq_tpmpfc_across_animals_reconstruction.py
+#python partner_seq_tpmm_across_animals_reconstruction.py
+python partner_pose_tpmss_across_animals_reconstruction.py
+python partner_pose_tpmpfc_across_animals_reconstruction.py
+python partner_pose_tpmm_across_animals_reconstruction.py
+#python partner_beh-mod_tpmss_across_animals_reconstruction.py
+#python partner_beh-mod_tpmpfc_across_animals_reconstruction.py
+#python partner_beh-mod_tpmm_across_animals_reconstruction.py

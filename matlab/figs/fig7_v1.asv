@@ -1,0 +1,2767 @@
+%{
+    show neural modulation
+    far close far
+    + close far 
+%}
+clear all
+close all
+addpath(genpath(pwd))
+rmpath(['D:\SBeA_Analysis\SBeA_v0.0.1\TPM\figs\function\' ...
+    'gtw\lib\subspace']);
+rmpath(['D:\SBeA_Analysis\SBeA_v0.0.1\TPM\figs\old\function\' ...
+    'gtw\lib\subspace']);
+rmpath(['D:\SBeA_Analysis\SBeA_v0.0.1\TPM\function\' ...
+    'gtw\lib\subspace']);
+%% set path
+rootpath = ['H:\MTPM_body_language'];
+
+beh_video_path = [rootpath,'\raw_data\behavior_op_20250915'];
+
+bea_path = [beh_video_path,'\BeA_path'];
+
+sep_tpm_path = [rootpath,...
+    '\raw_data\tpm_suite2p\sep'];
+
+beh_neu_path = [rootpath,'\beh_neu_20250918'];
+%% load data
+fileFolder = fullfile(beh_neu_path);
+dirOutput = dir(fullfile(fileFolder,'*-neu.mat'));
+neuNames = {dirOutput.name}';
+% neuNames([1,2,7,8],:) = [];
+% neuNames([3,4,5,6,9,10],:) = [];
+
+cut_size = 901;
+
+all_data_cell = cell(size(neuNames,1),9);
+%{rootname,neudata,pose_self,mov_self,seq_self,
+% pose_partner,mov_partner,seq_partner, distance}
+
+for k = 1:size(all_data_cell,1)
+    rootname = neuNames{k}(1:(end-8));
+    all_data_cell{k,1} = rootname;
+    
+    tempdata = load([beh_neu_path,'\',neuNames{k}]);
+    all_data_cell{k,2} = tempdata.dff_smo_Fc(:,cut_size:end)';
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-pose-tpm.mat']);
+    all_data_cell{k,3} = tempdata.coords3d(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-beh_mod-tpm.mat']);
+    all_data_cell{k,4} = tempdata.beh_mod_list(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-seq-tpm.mat']);
+    all_data_cell{k,5} = tempdata.seq_label_list(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-pose-free.mat']);
+    all_data_cell{k,6} = tempdata.coords3d(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-beh_mod-free.mat']);
+    all_data_cell{k,7} = tempdata.beh_mod_list(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-seq-free.mat']);
+    all_data_cell{k,8} = tempdata.seq_label_list(cut_size:end,:);
+
+    tempdata = load([beh_neu_path,'\',rootname,...
+        '-distance-free.mat']);
+    all_data_cell{k,9} = tempdata.dist_data;
+    all_data_cell{k,9}{1,1} = ...
+        all_data_cell{k,9}{1,1}(cut_size:end,:);
+    all_data_cell{k,9}{1,2} = ...
+        all_data_cell{k,9}{1,2}(cut_size:end,:);
+    all_data_cell{k,9}{1,3} = ...
+        all_data_cell{k,9}{1,3}(cut_size:end,:);
+    disp(k)
+end
+
+%% load dynamic data
+dy_name_list = {...
+    'rec_op_low_social_20251009.mat';...
+    'rec_op_high_social_20251009.mat';...
+    'rec_low_social_20251009.mat';...
+    'rec_high_social_20251009.mat';...
+    };
+
+dy_data_cell = cell(size(dy_name_list,1),1);
+for k = 1:size(dy_data_cell,1)
+    tempdata = load([beh_neu_path,'\',dy_name_list{k,1}]);
+    dy_data_cell{k,1} = tempdata;
+end
+%% split far-close-far trial
+fs = 30;
+baseline_far_time = 5;%s,2
+after_far_time = 2;%s,2
+min_close_time = 2;%s
+max_close_time = 4;%s
+
+baseline_far_frame = baseline_far_time*fs;
+after_far_frame = after_far_time*fs;
+min_close_frame = min_close_time*fs;
+max_close_frame = max_close_time*fs;
+
+fcf_cell = {};
+
+for k = 1:size(all_data_cell,1)
+    %% load data
+    tempdist = all_data_cell{k,9};
+    
+    %% select trials
+    distsavelist = idx2savelist(tempdist{2});
+
+    all_close_list = distsavelist(distsavelist(:,3)==1,:);
+
+    all_close_list(all_close_list(:,1)<baseline_far_frame,:) = [];
+    all_close_list(all_close_list(:,2)>...
+        length(tempdist{2})-after_far_frame,:) = [];
+    all_close_list(...
+        (all_close_list(:,2)-all_close_list(:,1))<...
+        min_close_frame,:) = [];
+    all_close_list(...
+        (all_close_list(:,2)-all_close_list(:,1))>...
+        max_close_frame,:) = [];
+
+    selidx = zeros(size(all_close_list,1),1);
+
+    for m = 1:size(all_close_list,1)
+        tempstart = all_close_list(m,1);
+        tempend = all_close_list(m,2);
+        seldata_baseline = tempdist{2}(...
+            (tempstart-baseline_far_frame):(tempstart-1));
+        seldata_after = tempdist{2}(...
+            (tempend+1):(tempend+after_far_frame));
+
+        if sum(seldata_baseline)==0 && sum(seldata_after)==0
+            selidx(m,1) = 1;
+        end
+    end
+
+    sel_close_list = all_close_list(selidx==1,:);
+    %% append data
+    for m = 1:size(sel_close_list,1)
+        tempstart = sel_close_list(m,1)-baseline_far_frame;
+        tempend = sel_close_list(m,2)+after_far_frame;
+
+        newname = [all_data_cell{k,1},'-',num2str(m)];
+        all_data_2 = all_data_cell{k,2}(tempstart:tempend,:);
+        all_data_3 = all_data_cell{k,3}(tempstart:tempend,:);
+        all_data_4 = all_data_cell{k,4}(tempstart:tempend,:);
+        all_data_5 = all_data_cell{k,5}(tempstart:tempend,:);
+        all_data_6 = all_data_cell{k,6}(tempstart:tempend,:);
+        all_data_7 = all_data_cell{k,7}(tempstart:tempend,:);
+        all_data_8 = all_data_cell{k,8}(tempstart:tempend,:);
+        all_data_9 = all_data_cell{k,9}{3}(tempstart:tempend,:);
+
+        fcf_cell = [fcf_cell;...
+            {newname,all_data_2,all_data_3,all_data_4,...
+            all_data_5,all_data_6,all_data_7,all_data_8,...
+            all_data_9,all_data_cell{k,1}}];
+
+        unique(all_data_5)
+    end
+    %%
+    disp(k)
+end
+%% split free and op fcf
+splname = split(fcf_cell(:,10),'-');
+sel_free_idx = strcmp(splname(:,1),'free');
+sel_op_idx = strcmp(splname(:,1),'op');
+
+free_fcf_cell = fcf_cell(sel_free_idx,:);
+op_fcf_cell = fcf_cell(sel_op_idx,:);
+
+%% show mov and seq of all the trials
+% sort data by length
+free_fcf_length = cell2mat(cellfun(@(x) size(x,1),...
+    free_fcf_cell(:,2),...
+    'UniformOutput',false));
+
+[~,sortidx] = sort(free_fcf_length,'descend');
+
+free_sort_fcf_cell = free_fcf_cell(sortidx,:);
+
+op_fcf_length = cell2mat(cellfun(@(x) size(x,1),...
+    op_fcf_cell(:,2),...
+    'UniformOutput',false));
+
+[~,sortidx] = sort(op_fcf_length,'descend');
+
+op_sort_fcf_cell = op_fcf_cell(sortidx,:);
+
+%% create mov mat
+pad_len = 240;
+
+free_self_mov_mat = -1*ones(size(free_sort_fcf_cell,1),pad_len);
+free_self_mov_start_list = zeros(size(free_self_mov_mat,1),2);
+free_self_mov_end_list = zeros(size(free_self_mov_mat,1),2);
+
+for k = 1:size(free_self_mov_mat,1)
+    tempmov = cell2mat(free_sort_fcf_cell{k,4}(:,2))';
+    free_self_mov_mat(k,1:length(tempmov)) = tempmov;
+    free_self_mov_start_list(k,:) = [baseline_far_frame,k];
+    free_self_mov_end_list(k,:) = [length(tempmov)-after_far_frame,k];
+end
+
+op_self_mov_mat = -1*ones(size(op_sort_fcf_cell,1),pad_len);
+op_self_mov_start_list = zeros(size(op_self_mov_mat,1),2);
+op_self_mov_end_list = zeros(size(op_self_mov_mat,1),2);
+
+for k = 1:size(op_self_mov_mat,1)
+    tempmov = cell2mat(op_sort_fcf_cell{k,4}(:,2))';
+    op_self_mov_mat(k,1:length(tempmov)) = tempmov;
+    op_self_mov_start_list(k,:) = [baseline_far_frame,k];
+    op_self_mov_end_list(k,:) = [length(tempmov)-after_far_frame,k];
+end
+
+free_partner_mov_mat = -1*ones(size(free_sort_fcf_cell,1),pad_len);
+free_partner_mov_start_list = zeros(size(free_partner_mov_mat,1),2);
+free_partner_mov_end_list = zeros(size(free_partner_mov_mat,1),2);
+
+for k = 1:size(free_partner_mov_mat,1)
+    tempmov = cell2mat(free_sort_fcf_cell{k,7}(:,2))';
+    free_partner_mov_mat(k,1:length(tempmov)) = tempmov;
+    free_partner_mov_start_list(k,:) = [baseline_far_frame,k];
+    free_partner_mov_end_list(k,:) = [length(tempmov)-after_far_frame,k];
+end
+
+op_partner_mov_mat = -1*ones(size(op_sort_fcf_cell,1),pad_len);
+op_partner_mov_start_list = zeros(size(op_partner_mov_mat,1),2);
+op_partner_mov_end_list = zeros(size(op_partner_mov_mat,1),2);
+
+for k = 1:size(op_partner_mov_mat,1)
+    tempmov = cell2mat(op_sort_fcf_cell{k,7}(:,2))';
+    op_partner_mov_mat(k,1:length(tempmov)) = tempmov;
+    op_partner_mov_start_list(k,:) = [baseline_far_frame,k];
+    op_partner_mov_end_list(k,:) = [length(tempmov)-after_far_frame,k];
+end
+
+
+%% create seq mat
+free_self_seq_mat = -1*ones(size(free_sort_fcf_cell,1),pad_len);
+free_self_seq_start_list = zeros(size(free_self_seq_mat,1),2);
+free_self_seq_end_list = zeros(size(free_self_seq_mat,1),2);
+
+for k = 1:size(free_self_seq_mat,1)
+    tempseq = free_sort_fcf_cell{k,5}';
+    free_self_seq_mat(k,1:length(tempseq)) = tempseq;
+    free_self_seq_start_list(k,:) = [baseline_far_frame,k];
+    free_self_seq_end_list(k,:) = [length(tempseq)-after_far_frame,k];
+end
+
+op_self_seq_mat = -1*ones(size(op_sort_fcf_cell,1),pad_len);
+op_self_seq_start_list = zeros(size(op_self_seq_mat,1),2);
+op_self_seq_end_list = zeros(size(op_self_seq_mat,1),2);
+
+for k = 1:size(op_self_seq_mat,1)
+    tempseq = op_sort_fcf_cell{k,5}';
+    op_self_seq_mat(k,1:length(tempseq)) = tempseq;
+    op_self_seq_start_list(k,:) = [baseline_far_frame,k];
+    op_self_seq_end_list(k,:) = [length(tempseq)-after_far_frame,k];
+end
+
+free_partner_seq_mat = -1*ones(size(free_sort_fcf_cell,1),pad_len);
+free_partner_seq_start_list = zeros(size(free_partner_seq_mat,1),2);
+free_partner_seq_end_list = zeros(size(free_partner_seq_mat,1),2);
+
+for k = 1:size(free_partner_seq_mat,1)
+    tempseq = free_sort_fcf_cell{k,8}';
+    free_partner_seq_mat(k,1:length(tempseq)) = tempseq;
+    free_partner_seq_start_list(k,:) = [baseline_far_frame,k];
+    free_partner_seq_end_list(k,:) = [length(tempseq)-after_far_frame,k];
+end
+
+op_partner_seq_mat = -1*ones(size(op_sort_fcf_cell,1),pad_len);
+op_partner_seq_start_list = zeros(size(op_partner_seq_mat,1),2);
+op_partner_seq_end_list = zeros(size(op_partner_seq_mat,1),2);
+
+for k = 1:size(op_partner_seq_mat,1)
+    tempseq = op_sort_fcf_cell{k,8}';
+    op_partner_seq_mat(k,1:length(tempseq)) = tempseq;
+    op_partner_seq_start_list(k,:) = [baseline_far_frame,k];
+    op_partner_seq_end_list(k,:) = [length(tempseq)-after_far_frame,k];
+end
+%% create neural activities
+free_neu_mat = [];
+free_neu_start_list = [];
+free_neu_end_list = [];
+
+count = 1;
+
+for k = 1:size(free_sort_fcf_cell,1)
+    tempneu = free_sort_fcf_cell{k,2}';
+    padneu = nan(size(tempneu,1),pad_len);
+
+    for m = 1:size(padneu,1)
+        ttneu = tempneu(m,:);
+        padneu(m,1:length(ttneu)) = ttneu;
+        free_neu_start_list = [free_neu_start_list;[baseline_far_frame,count]];
+        free_neu_end_list = [free_neu_end_list;[length(ttneu)-after_far_frame,count]];
+
+        count = count+1;
+    end
+    
+    free_neu_mat = [free_neu_mat;padneu];
+end
+
+op_neu_mat = [];
+op_neu_start_list = [];
+op_neu_end_list = [];
+
+count = 1;
+
+for k = 1:size(op_sort_fcf_cell,1)
+    tempneu = op_sort_fcf_cell{k,2}';
+    padneu = nan(size(tempneu,1),pad_len);
+
+    for m = 1:size(padneu,1)
+        ttneu = tempneu(m,:);
+        padneu(m,1:length(ttneu)) = ttneu;
+        op_neu_start_list = [op_neu_start_list;[baseline_far_frame,count]];
+        op_neu_end_list = [op_neu_end_list;[length(ttneu)-after_far_frame,count]];
+
+        count = count+1;
+    end
+    
+    op_neu_mat = [op_neu_mat;padneu];
+end
+
+%% create lmt cell
+free_lmt_cell = cell(size(free_sort_fcf_cell,1),1);
+for k = 1:size(free_lmt_cell,1)
+    %%
+    tempneu = free_sort_fcf_cell{k,2};
+    [coeff, score, ~, ~, explained] = pca(tempneu');
+
+    norm_coeff = zeros(size(coeff));
+    for m = 1:size(coeff,2)
+        norm_coeff(:,m) = mat2gray(coeff(:,m));
+    end
+
+    free_lmt_cell{k,1} = norm_coeff;
+    free_lmt_cell{k,2} = coeff;
+    free_lmt_cell{k,3} = score;
+    free_lmt_cell{k,4} = explained;
+end
+
+op_lmt_cell = cell(size(op_sort_fcf_cell,1),1);
+for k = 1:size(op_lmt_cell,1)
+    %%
+    tempneu = op_sort_fcf_cell{k,2};
+    [coeff, score, ~, ~, explained] = pca(tempneu');
+
+    norm_coeff = zeros(size(coeff));
+    for m = 1:size(coeff,2)
+        norm_coeff(:,m) = mat2gray(coeff(:,m));
+    end
+
+    op_lmt_cell{k,1} = norm_coeff;
+    op_lmt_cell{k,2} = coeff;
+    op_lmt_cell{k,3} = score;
+    op_lmt_cell{k,4} = explained;
+end
+%% create the unique_mov and unique_seq
+all_mov = [];
+all_mov_name = {};
+for k = 1:size(fcf_cell,1)
+    all_mov = [all_mov;...
+        cell2mat(fcf_cell{k,4}(:,2));...
+        cell2mat(fcf_cell{k,7}(:,2))];
+    all_mov_name = [all_mov_name;...
+        fcf_cell{k,4}(:,1);...
+        fcf_cell{k,7}(:,1)];
+end
+unique_mov = unique(all_mov);
+cmap_mov = cbrewer2('BuPu',length(unique_mov));
+
+unique_mov_name = cell(size(unique_mov));
+for k = 1:size(unique_mov,1)
+    tempname = all_mov_name(unique_mov(k)==all_mov);
+    unique_mov_name{k} = tempname{1};
+end
+
+all_seq = [];
+for k = 1:size(fcf_cell,1)
+    all_seq = [all_seq;fcf_cell{k,5};fcf_cell{k,8}];
+end
+unique_seq = unique(all_seq);
+unique_seq = unique_seq(2:end);
+cmap_seq = cbrewer2('BuPu',length(unique_seq));
+%% plot canvas
+hall = figure(1);
+set(hall,'Position',[980,100,800,800])
+set(hall,'color','white');
+%% show paradigm, top op, bottom raw
+start_x = 0.06;
+start_y = 0.89;
+
+box_x = 0.1;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+x = 0:0.1:20;
+a = 1;
+b = -1*(10*2*a);
+y = a.*x.*x+b.*x;
+plot(x,y,'-k')
+ylabel({'dmPFC recording',...
+    '+ Opto-activation',...
+    'Distance'})
+
+title('Experiments')
+
+box off
+set(gca,'XTick',[],'YTick',[])
+set(gca,'FontSize',6)
+
+subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y])
+x = 0:0.1:20;
+a = 1;
+b = -1*(10*2*a);
+y = a.*x.*x+b.*x;
+plot(x,y,'-k')
+xlabel('Time')
+ylabel({'dmPFC recording',...
+    'Distance'})
+
+box off
+set(gca,'XTick',[],'YTick',[])
+set(gca,'FontSize',6)
+%% show self mov, top op, bottom raw 
+start_x = 0.2;
+start_y = 0.89;
+
+box_x = 0.075;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+x_tick = [1,60,120,180,240];
+x_tick_label = [-2,0,2,4,6];
+
+temph = subplot('Position',[start_x,start_y,box_x,box_y]);
+imagesc(op_self_mov_mat)
+colormap(temph,[1,1,1;cmap_mov])
+hold on
+plot(op_self_mov_start_list(:,1),op_self_mov_start_list(:,2),'-k')
+hold on
+plot(op_self_mov_end_list(:,1),op_self_mov_end_list(:,2),'-k')
+hold off
+
+box off
+title('Subject')
+
+ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',[])
+% set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(op_self_mov_mat,1)])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+
+temph = subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y]);
+imagesc(free_self_mov_mat)
+colormap(temph,[1,1,1;cmap_mov])
+hold on
+plot(free_self_mov_start_list(:,1),free_self_mov_start_list(:,2),'-k')
+hold on
+plot(free_self_mov_end_list(:,1),free_self_mov_end_list(:,2),'-k')
+hold off
+
+box off
+
+ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+% set(gca,'XTickLabel',[])
+set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(free_self_mov_mat,1)])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+xlabel('Time (s)')
+
+%% show partner mov, top op, bottom raw 
+start_x = 0.29;
+start_y = 0.89;
+
+box_x = 0.075;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+temph = subplot('Position',[start_x,start_y,box_x,box_y]);
+imagesc(op_partner_mov_mat)
+colormap(temph,[1,1,1;cmap_mov])
+hold on
+plot(op_partner_mov_start_list(:,1),op_partner_mov_start_list(:,2),'-k')
+hold on
+plot(op_partner_mov_end_list(:,1),op_partner_mov_end_list(:,2),'-k')
+hold off
+
+box off
+title('Object')
+
+% ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',[])
+% set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(op_partner_mov_mat,1)])
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+
+temph = subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y]);
+imagesc(free_partner_mov_mat)
+colormap(temph,[1,1,1;cmap_mov])
+hold on
+plot(free_partner_mov_start_list(:,1),free_partner_mov_start_list(:,2),'-k')
+hold on
+plot(free_partner_mov_end_list(:,1),free_partner_mov_end_list(:,2),'-k')
+hold off
+
+box off
+
+% ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+% set(gca,'XTickLabel',[])
+set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(free_self_mov_mat,1)])
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+xlabel('Time (s)')
+
+cbar_box_x = 0.006;
+cbar_box_y = 0.05;
+
+cbar_inter_x = 0.01;
+
+temph = subplot('Position',[...
+    start_x+1*box_x+cbar_inter_x,...
+    start_y+box_y-cbar_box_y,...
+    cbar_box_x,cbar_box_y]);
+imagesc(flipud((1:max(unique_mov))'))
+colormap(temph,cmap_mov)
+set(gca,'XTick',[],'YTick',[])
+
+text(0.5,50,'1','FontSize',6,'VerticalAlignment','middle')
+text(0.5,-5,'43','FontSize',6,'VerticalAlignment','middle')
+
+text(3.5,25,{'Movement','categories'},...
+    'FontSize',6,'Rotation',90,...
+    'HorizontalAlignment','center')
+
+%% show self seq, top op, bottom raw 
+start_x = 0.44;
+start_y = 0.89;
+
+box_x = 0.075;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+x_tick = [1,60,120,180,240];
+x_tick_label = [-2,0,2,4,6];
+
+temph = subplot('Position',[start_x,start_y,box_x,box_y]);
+imagesc(op_self_seq_mat)
+colormap(temph,[1,1,1;cmap_seq])
+hold on
+plot(op_self_seq_start_list(:,1),op_self_seq_start_list(:,2),'-k')
+hold on
+plot(op_self_seq_end_list(:,1),op_self_seq_end_list(:,2),'-k')
+hold off
+
+box off
+title('Subject')
+
+ylabel('Sequence trials')
+
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',[])
+% set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(op_self_seq_mat,1)])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+
+temph = subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y]);
+imagesc(free_self_seq_mat)
+colormap(temph,[1,1,1;cmap_seq])
+hold on
+plot(free_self_seq_start_list(:,1),free_self_seq_start_list(:,2),'-k')
+hold on
+plot(free_self_seq_end_list(:,1),free_self_seq_end_list(:,2),'-k')
+hold off
+
+box off
+
+ylabel('Sequence trials')
+
+set(gca,'XTick',x_tick)
+% set(gca,'XTickLabel',[])
+set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(free_self_seq_mat,1)])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+xlabel('Time (s)')
+
+%% show partner seq, top op, bottom raw 
+start_x = 0.53;
+start_y = 0.89;
+
+box_x = 0.075;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+temph = subplot('Position',[start_x,start_y,box_x,box_y]);
+imagesc(op_partner_seq_mat)
+colormap(temph,[1,1,1;cmap_seq])
+hold on
+plot(op_partner_seq_start_list(:,1),op_partner_seq_start_list(:,2),'-k')
+hold on
+plot(op_partner_seq_end_list(:,1),op_partner_seq_end_list(:,2),'-k')
+hold off
+
+box off
+title('Object')
+
+% ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',[])
+% set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(op_partner_seq_mat,1)])
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+
+temph = subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y]);
+imagesc(free_partner_seq_mat)
+colormap(temph,[1,1,1;cmap_seq])
+hold on
+plot(free_partner_seq_start_list(:,1),free_partner_seq_start_list(:,2),'-k')
+hold on
+plot(free_partner_seq_end_list(:,1),free_partner_seq_end_list(:,2),'-k')
+hold off
+
+box off
+
+% ylabel('Movement trials')
+
+set(gca,'XTick',x_tick)
+% set(gca,'XTickLabel',[])
+set(gca,'XTickLabel',x_tick_label)
+
+set(gca,'YTick',[1,size(free_self_seq_mat,1)])
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+set(gca,'FontSize',6)
+xlabel('Time (s)')
+
+cbar_box_x = 0.006;
+cbar_box_y = 0.05;
+
+cbar_inter_x = 0.01;
+
+temph = subplot('Position',[...
+    start_x+1*box_x+cbar_inter_x,...
+    start_y+box_y-cbar_box_y,...
+    cbar_box_x,cbar_box_y]);
+imagesc(flipud((1:max(unique_seq))'))
+colormap(temph,cmap_seq)
+set(gca,'XTick',[],'YTick',[])
+
+text(0.5,40,'1','FontSize',6,'VerticalAlignment','middle')
+text(0.5,-5,'31','FontSize',6,'VerticalAlignment','middle')
+
+text(3.5,17,{'Sequence','categories'},...
+    'FontSize',6,'Rotation',90,...
+    'HorizontalAlignment','center')
+%% compare behavior differences, all
+mov_all = cellfun(@(x) cell2mat(x(:,2)),...
+    all_data_cell(:,[4,7]),'UniformOutput',false);
+
+tab_mov_all = cellfun(@(x) tabulate(x),...
+    mov_all,'UniformOutput',false);
+
+mov_frac_cell = cell(size(mov_all));
+for m = 1:size(mov_frac_cell,1)
+    for n = 1:size(mov_frac_cell,2)
+        temptab = tab_mov_all{m,n};
+        mov_frac = zeros(1,size(unique_mov,1));
+        mov_frac(1,temptab(:,1)) = ...
+            temptab(:,3)/100;
+        mov_frac_cell{m,n} = mov_frac;
+    end
+end
+
+op_mov_frac_self_all = cell2mat(mov_frac_cell(6:10,1))';
+free_mov_frac_self_all = cell2mat(mov_frac_cell(1:5,1))';
+
+op_mov_frac_partner_all = cell2mat(mov_frac_cell(6:10,2))';
+free_mov_frac_partner_all = cell2mat(mov_frac_cell(1:5,2))';
+
+self_sign_mov = [8,32];
+self_sign_mov_name = unique_mov_name(self_sign_mov);
+%% compare behavior differences, mov
+free_mov_frac_self = zeros(size(free_sort_fcf_cell,1),...
+    size(unique_mov,1));
+free_mov_frac_partner = zeros(size(free_sort_fcf_cell,1),...
+    size(unique_mov,1));
+for k = 1:size(free_sort_fcf_cell,1)
+    tempmov_self = cell2mat(...
+        free_sort_fcf_cell{k,4}(:,2));
+    tab_tempmov_self = tabulate(tempmov_self);
+    mov_frac = zeros(1,size(unique_mov,1));
+    mov_frac(1,tab_tempmov_self(:,1)) = ...
+        tab_tempmov_self(:,3)/100;
+
+    free_mov_frac_self(k,:) = mov_frac;
+
+    tempmov_partner = cell2mat(...
+        free_sort_fcf_cell{k,7}(:,2));
+    tab_tempmov_partner = tabulate(tempmov_partner);
+    mov_frac = zeros(1,size(unique_mov,1));
+    mov_frac(1,tab_tempmov_partner(:,1)) = ...
+        tab_tempmov_partner(:,3)/100;
+
+    free_mov_frac_partner(k,:) = mov_frac;
+end
+
+op_mov_frac_self = zeros(size(op_sort_fcf_cell,1),...
+    size(unique_mov,1));
+op_mov_frac_partner = zeros(size(op_sort_fcf_cell,1),...
+    size(unique_mov,1));
+for k = 1:size(op_sort_fcf_cell,1)
+    tempmov_self = cell2mat(...
+        op_sort_fcf_cell{k,4}(:,2));
+    tab_tempmov_self = tabulate(tempmov_self);
+    mov_frac = zeros(1,size(unique_mov,1));
+    mov_frac(1,tab_tempmov_self(:,1)) = ...
+        tab_tempmov_self(:,3)/100;
+
+    op_mov_frac_self(k,:) = mov_frac;
+
+    tempmov_partner = cell2mat(...
+        op_sort_fcf_cell{k,7}(:,2));
+    tab_tempmov_partner = tabulate(tempmov_partner);
+    mov_frac = zeros(1,size(unique_mov,1));
+    mov_frac(1,tab_tempmov_partner(:,1)) = ...
+        tab_tempmov_partner(:,3)/100;
+
+    op_mov_frac_partner(k,:) = mov_frac;
+end
+
+% screen data
+free_mov_frac_self_idx = double(free_mov_frac_self>0);
+free_mov_frac_partner_idx = double(free_mov_frac_partner>0);
+op_mov_frac_self_idx = double(op_mov_frac_self>0);
+op_mov_frac_partner_idx = double(op_mov_frac_partner>0);
+
+free_mov_frac_self_idx_sum = sum(free_mov_frac_self_idx);
+op_mov_frac_self_idx_sum = sum(op_mov_frac_self_idx);
+free_mov_frac_partner_idx_sum = sum(free_mov_frac_partner_idx);
+op_mov_frac_partner_idx_sum = sum(op_mov_frac_partner_idx);
+
+sel_thres = 10;
+
+sel_free_mov_self = free_mov_frac_self_idx_sum>=sel_thres;
+sel_op_mov_self = op_mov_frac_self_idx_sum>=sel_thres;
+sel_mov_self = sel_free_mov_self|sel_op_mov_self;
+sel_mov_self_idx = unique([find(sel_mov_self),self_sign_mov]);
+
+sel_free_mov_partner = free_mov_frac_partner_idx_sum>=sel_thres;
+sel_op_mov_partner = op_mov_frac_partner_idx_sum>=sel_thres;
+sel_mov_partner = sel_free_mov_partner|sel_op_mov_partner;
+sel_mov_partner_idx = find(sel_mov_partner);
+
+cmp_op_mov_self = op_mov_frac_self(:,sel_mov_self_idx)';
+cmp_free_mov_self = free_mov_frac_self(:,sel_mov_self_idx)';
+
+cmp_op_mov_partner = op_mov_frac_partner(:,sel_mov_partner_idx)';
+cmp_free_mov_partner = free_mov_frac_partner(:,sel_mov_partner_idx)';
+
+cmp_op_mov_self_all = op_mov_frac_self_all(sel_mov_self_idx,:);
+cmp_free_mov_self_all = free_mov_frac_self_all(sel_mov_self_idx,:);
+
+cmp_op_mov_partner_all = op_mov_frac_partner_all(sel_mov_partner_idx,:);
+cmp_free_mov_partner_all = free_mov_frac_partner_all(sel_mov_partner_idx,:);
+
+% final show data, trial x mov
+show_op_mov_self = cmp_op_mov_self';
+show_free_mov_self = cmp_free_mov_self';
+
+show_op_mov_partner = cmp_op_mov_partner';
+show_free_mov_partner = cmp_free_mov_partner';
+
+
+show_op_mov_self_all = cmp_op_mov_self_all';
+show_free_mov_self_all = cmp_free_mov_self_all';
+
+show_op_mov_partner_all = cmp_op_mov_partner_all';
+show_free_mov_partner_all = cmp_free_mov_partner_all';
+
+%% show behavior differences, subject
+start_x = 0.7;
+start_y = 0.89;
+
+box_x = 0.1;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+show_data_left = show_op_mov_self;
+show_data_right = show_free_mov_self;
+
+mean_show_data_left = mean(show_data_left);
+mean_show_data_right = mean(show_data_right);
+
+std_show_data_left = std(show_data_left)./...
+    sqrt(size(show_data_left,1));
+std_show_data_right = std(show_data_right)./...
+    sqrt(size(show_data_right,1));
+
+show_xlist_c = 1:length(mean_show_data_left);
+
+x_bar_bias = 0.2;
+
+show_xlist_left = show_xlist_c-x_bar_bias;
+show_xlist_right = show_xlist_c+x_bar_bias;
+
+neu_cmap = cbrewer2('Paired',12);
+
+in_c = neu_cmap(5,:);
+de_c = neu_cmap(1,:);
+no_c = neu_cmap(3,:);
+
+two_state_c = [...
+    de_c;in_c;];
+
+op_c = two_state_c(2,:);
+free_c = two_state_c(1,:);
+
+bar_w = 0.2;
+cap_size = 1;
+
+x_bias = bar_w/2;
+
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+bar(show_xlist_left,mean_show_data_left,bar_w,...
+    'FaceColor',op_c,'LineWidth',0.25)
+hold on
+bar(show_xlist_right,mean_show_data_right,bar_w,...
+    'FaceColor',free_c,'LineWidth',0.25)
+hold on
+errorbar(show_xlist_left,mean_show_data_left,...
+    std_show_data_left,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+errorbar(show_xlist_right,mean_show_data_right,...
+    std_show_data_right,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+for k = 1:size(show_data_left,1)
+    plot(show_xlist_left+x_bias,show_data_left(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+for k = 1:size(show_data_right,1)
+    plot(show_xlist_right+x_bias,show_data_right(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+hold off
+
+axis([0.3,5.7,0,0.6])
+
+box off
+
+set(gca,'TickDir','out')
+
+set(gca,'XTickLabel',[])
+
+ylabel({'Fractions','Social episodes'})
+set(gca,'FontSize',6)
+
+title('Subject')
+
+
+
+show_data_left = show_op_mov_self_all;
+show_data_right = show_free_mov_self_all;
+
+mean_show_data_left = mean(show_data_left);
+mean_show_data_right = mean(show_data_right);
+
+std_show_data_left = std(show_data_left)./...
+    sqrt(size(show_data_left,1));
+std_show_data_right = std(show_data_right)./...
+    sqrt(size(show_data_right,1));
+
+show_xlist_c = 1:length(mean_show_data_left);
+
+x_bar_bias = 0.2;
+
+show_xlist_left = show_xlist_c-x_bar_bias;
+show_xlist_right = show_xlist_c+x_bar_bias;
+
+neu_cmap = cbrewer2('Paired',12);
+
+in_c = neu_cmap(5,:);
+de_c = neu_cmap(1,:);
+no_c = neu_cmap(3,:);
+
+two_state_c = [...
+    de_c;in_c;];
+
+op_c = two_state_c(2,:);
+free_c = two_state_c(1,:);
+
+bar_w = 0.2;
+
+subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y])
+bar(show_xlist_left,mean_show_data_left,bar_w,...
+    'FaceColor',op_c,'LineWidth',0.25)
+hold on
+bar(show_xlist_right,mean_show_data_right,bar_w,...
+    'FaceColor',free_c,'LineWidth',0.25)
+hold on
+errorbar(show_xlist_left,mean_show_data_left,...
+    std_show_data_left,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+errorbar(show_xlist_right,mean_show_data_right,...
+    std_show_data_right,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+for k = 1:size(show_data_left,1)
+    plot(show_xlist_left+x_bias,show_data_left(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+for k = 1:size(show_data_right,1)
+    plot(show_xlist_right+x_bias,show_data_right(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+
+% show significant of turn behavior
+show_line_y = 0.45;
+plot([show_xlist_left(end),show_xlist_right(end)],...
+    [show_line_y,show_line_y],'-k','LineWidth',0.25)
+hold on
+text(show_xlist_c(end),show_line_y,'*',...
+    'HorizontalAlignment','center',...
+    'VerticalAlignment','bottom')
+hold on
+
+% show significant of immobility behavior
+show_line_y = 0.45;
+plot([show_xlist_left(2),show_xlist_right(2)],...
+    [show_line_y,show_line_y],'-k','LineWidth',0.25)
+hold on
+text(show_xlist_c(2),show_line_y,'****',...
+    'HorizontalAlignment','center',...
+    'VerticalAlignment','bottom')
+hold off
+
+axis([0.3,5.7,0,0.6])
+
+box off
+
+set(gca,'TickDir','out')
+
+set(gca,'XTick',show_xlist_c)
+set(gca,'XTickLabel',unique_mov_name(sel_mov_self_idx))
+
+ylabel({'Fractions','Full sessions'})
+set(gca,'FontSize',6)
+
+%% show behavior differences, object
+start_x = 0.82;
+start_y = 0.89;
+
+box_x = 0.17;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+show_data_left = show_op_mov_partner;
+show_data_right = show_free_mov_partner;
+
+mean_show_data_left = mean(show_data_left);
+mean_show_data_right = mean(show_data_right);
+
+std_show_data_left = std(show_data_left)./...
+    sqrt(size(show_data_left,1));
+std_show_data_right = std(show_data_right)./...
+    sqrt(size(show_data_right,1));
+
+show_xlist_c = 1:length(mean_show_data_left);
+
+x_bar_bias = 0.2;
+
+show_xlist_left = show_xlist_c-x_bar_bias;
+show_xlist_right = show_xlist_c+x_bar_bias;
+
+neu_cmap = cbrewer2('Paired',12);
+
+in_c = neu_cmap(5,:);
+de_c = neu_cmap(1,:);
+no_c = neu_cmap(3,:);
+
+two_state_c = [...
+    de_c;in_c;];
+
+op_c = two_state_c(2,:);
+free_c = two_state_c(1,:);
+
+bar_w = 0.2;
+cap_size = 1;
+
+x_bias = bar_w/2;
+
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+bar(show_xlist_left,mean_show_data_left,bar_w,...
+    'FaceColor',op_c,'LineWidth',0.25)
+hold on
+bar(show_xlist_right,mean_show_data_right,bar_w,...
+    'FaceColor',free_c,'LineWidth',0.25)
+hold on
+errorbar(show_xlist_left,mean_show_data_left,...
+    std_show_data_left,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+errorbar(show_xlist_right,mean_show_data_right,...
+    std_show_data_right,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+for k = 1:size(show_data_left,1)
+    plot(show_xlist_left+x_bias,show_data_left(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+for k = 1:size(show_data_right,1)
+    plot(show_xlist_right+x_bias,show_data_right(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+hold off
+
+axis([0.3,8.7,0,0.6])
+
+box off
+
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+
+set(gca,'XTickLabel',[])
+
+set(gca,'FontSize',6)
+
+title('Object')
+
+
+show_data_left = show_op_mov_partner_all;
+show_data_right = show_free_mov_partner_all;
+
+mean_show_data_left = mean(show_data_left);
+mean_show_data_right = mean(show_data_right);
+
+std_show_data_left = std(show_data_left)./...
+    sqrt(size(show_data_left,1));
+std_show_data_right = std(show_data_right)./...
+    sqrt(size(show_data_right,1));
+
+show_xlist_c = 1:length(mean_show_data_left);
+
+x_bar_bias = 0.2;
+
+show_xlist_left = show_xlist_c-x_bar_bias;
+show_xlist_right = show_xlist_c+x_bar_bias;
+
+neu_cmap = cbrewer2('Paired',12);
+
+in_c = neu_cmap(5,:);
+de_c = neu_cmap(1,:);
+no_c = neu_cmap(3,:);
+
+two_state_c = [...
+    de_c;in_c;];
+
+op_c = two_state_c(2,:);
+free_c = two_state_c(1,:);
+
+bar_w = 0.2;
+
+
+subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y])
+tempbar_op = bar(show_xlist_left,mean_show_data_left,bar_w,...
+    'FaceColor',op_c,'LineWidth',0.25);
+hold on
+tempbar_free = bar(show_xlist_right,mean_show_data_right,bar_w,...
+    'FaceColor',free_c,'LineWidth',0.25);
+hold on
+errorbar(show_xlist_left,mean_show_data_left,...
+    std_show_data_left,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+errorbar(show_xlist_right,mean_show_data_right,...
+    std_show_data_right,'CapSize',cap_size,'LineWidth',0.25,...
+    'Color','k','LineStyle','none')
+hold on
+for k = 1:size(show_data_left,1)
+    plot(show_xlist_left+x_bias,show_data_left(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+for k = 1:size(show_data_right,1)
+    plot(show_xlist_right+x_bias,show_data_right(k,:),'o',...
+        'MarkerFaceColor','w','MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',1.5)
+    hold on
+end
+hold off
+
+axis([0.3,8.7,0,0.6])
+
+box off
+
+legend([tempbar_op,tempbar_free],'Rec + Opto','Rec')
+legend boxoff
+
+set(gca,'YTickLabel',[])
+
+set(gca,'TickDir','out')
+
+set(gca,'FontSize',6)
+
+set(gca,'XTick',show_xlist_c)
+set(gca,'XTickLabel',unique_mov_name(sel_mov_partner_idx),...
+    'TickLabelInterpreter','none')
+
+%% show raw tpm image
+start_x = 0.03;
+start_y = 0.64;
+
+box_x = 0.08;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+show_img_name = {...
+    'op-seg10-10tpmpfc-20wt-20250906-tpm';...
+    'free-seg9-10tpmpfc-19wt-20250906-tpm'};
+
+maxp_cell = cell(size(show_img_name,1),1);
+for k = 1:size(maxp_cell,1)
+    %
+    temppath = fullfile(...
+        sep_tpm_path,...
+        show_img_name{k},...
+        'max_proj.mat');
+    tempdata = load(temppath);
+    maxp_cell{k,1} = tempdata.maxp_img;
+end
+
+crop_start_x = 100;
+crop_start_y = 30;
+crop_end_x = 500;
+crop_end_y = 430;
+
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+imshow(maxp_cell{1}(...
+    crop_start_y:crop_end_y,...
+    crop_start_x:crop_end_x),[])
+ylabel('Rec + Opto')
+
+title({'mTPM','Max projection'})
+
+box on
+set(gca,'XTick',[],'YTick',[])
+set(gca,'FontSize',6)
+
+subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y])
+imshow(maxp_cell{2}(...
+    crop_start_y:crop_end_y,...
+    crop_start_x:crop_end_x),[])
+box on
+set(gca,'XTick',[],'YTick',[])
+ylabel('Rec')
+set(gca,'FontSize',6)
+
+%% show raw neu
+start_x = 0.15;
+start_y = 0.64;
+
+box_x = 0.06;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+show_range = [-0.2,0.2];
+cmap_neu = flipud(cbrewer2('RdBu',256));
+
+temph = subplot('Position',[...
+    start_x,start_y,box_x,box_y]);
+imagesc(op_neu_mat,show_range)
+colormap(temph,[1,1,1;cmap_neu])
+hold on
+plot(op_neu_start_list(:,1),op_neu_start_list(:,2),'-k')
+hold on
+plot(op_neu_end_list(:,1),op_neu_end_list(:,2),'-k')
+hold off
+
+box off
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',[])
+ylabel('Neural activities')
+% ytickformat('%.3e')
+temph.YAxis.Exponent = 2;
+set(gca,'YTick',[100,1000,2000])
+
+temph = subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y]);
+imagesc(free_neu_mat,show_range)
+colormap(temph,[1,1,1;cmap_neu])
+hold on
+plot(free_neu_start_list(:,1),free_neu_start_list(:,2),'-k')
+hold on
+plot(free_neu_end_list(:,1),free_neu_end_list(:,2),'-k')
+hold off
+
+box off
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+set(gca,'XTick',x_tick)
+set(gca,'XTickLabel',x_tick_label)
+xlabel('Time (s)')
+ylabel('Neural activities')
+temph.YAxis.Exponent = 2;
+set(gca,'YTick',[100,1000,2000,3000])
+
+% colorbar
+cbar_box_x = 0.006;
+cbar_box_y = 0.05;
+
+cbar_inter_x = 0.017;
+
+temph = subplot('Position',[...
+    start_x,...
+    start_y+box_y+cbar_inter_x,...
+    cbar_box_y,cbar_box_x]);
+imagesc(flipud((1:256)))
+colormap(temph,cmap_neu)
+set(gca,'XTick',[],'YTick',[])
+
+text(280,2,'0.2','FontSize',6,'VerticalAlignment','bottom')
+text(-110,2,'-0.2','FontSize',6,'VerticalAlignment','bottom')
+
+text(128,-1,'ΔF/F','FontSize',6,'Rotation',0,...
+    'HorizontalAlignment','center')
+%% compare raw data
+all_mean_tpm = cell2mat(cellfun(@(x) mean(x(:)),...
+    all_data_cell(:,2),'UniformOutput',false));
+
+splname = split(all_data_cell(:,1),'-');
+
+cmp_pair_name = {...
+    '6tpmpfc';...
+    '7tpmpfc';...
+    '8tpmpfc';...
+    '9tpmpfc';...
+    '10tpmpfc';...
+    };
+
+cmp_group_name = {...
+    'op';...
+    'free'};
+
+all_cmp_data = zeros(size(cmp_pair_name,1),...
+    size(cmp_group_name,1));
+
+for m = 1:size(all_cmp_data,1)
+    for n = 1:size(all_cmp_data,2)
+        selidx_pair = strcmp(...
+            cmp_pair_name{m},splname(:,3));
+        selidx_group = strcmp(...
+            cmp_group_name{n},splname(:,1));
+        selidx = selidx_pair&selidx_group;
+        all_cmp_data(m,n) = all_mean_tpm(selidx);
+    end
+end
+
+free_social_tpm = cell2mat(cellfun(@(x) ...
+    mean(mean(x(baseline_far_frame:(end-after_far_frame),:))),...
+    free_fcf_cell(:,2),'UniformOutput',false));
+
+op_social_tpm = cell2mat(cellfun(@(x) ...
+    mean(mean(x(baseline_far_frame:(end-after_far_frame),:))),...
+    op_fcf_cell(:,2),'UniformOutput',false));
+
+%% show compare raw data
+start_x = 0.27;
+start_y = 0.64;
+
+box_x = 0.021;
+box_y = 0.08;
+
+inter_y = 0.02;
+
+x_list = [1,2];
+bar_w = 0.6;
+cap_size = 2;
+mk_size = 1.5;
+x_bias = bar_w/2;
+
+% social
+mean_op_social_tpm = mean(op_social_tpm);
+mean_free_social_tpm = mean(free_social_tpm);
+
+std_op_social_tpm = std(op_social_tpm)./...
+    sqrt(length(op_social_tpm));
+std_free_social_tpm = std(free_social_tpm)./...
+    sqrt(length(free_social_tpm));
+
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+bar(x_list(1),mean_op_social_tpm,bar_w,...
+    'FaceColor',op_c)
+hold on
+bar(x_list(2),mean_free_social_tpm,bar_w,...
+    'FaceColor',free_c)
+hold on
+errorbar(x_list,...
+    [mean_op_social_tpm,mean_free_social_tpm],...
+    [std_op_social_tpm,std_free_social_tpm],...
+    'CapSize',cap_size,'LineStyle','none',...
+    'Color','k')
+hold on
+plot(x_bias+x_list(1)*ones(length(op_social_tpm),1),...
+    op_social_tpm,...
+        'o','MarkerFaceColor','w',...
+        'MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',mk_size)
+hold on
+plot(x_bias+x_list(2)*ones(length(free_social_tpm),1),...
+    free_social_tpm,...
+        'o','MarkerFaceColor','w',...
+        'MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',mk_size)
+hold off
+
+box off
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+set(gca,'XTick',x_list)
+set(gca,'XTickLabel',[])
+axis([0.3,2.7,-0.04,0.1])
+
+
+ylabel({'Mean ΔF/F','Social episode'})
+
+
+% all
+mean_all_cmp_data = mean(all_cmp_data);
+std_all_cmp_data = std(all_cmp_data)./sqrt(size(all_cmp_data,1));
+subplot('Position',[...
+    start_x,start_y-(box_y+inter_y),box_x,box_y])
+bar(x_list(1),mean_all_cmp_data(1),bar_w,...
+    'FaceColor',op_c)
+hold on
+bar(x_list(2),mean_all_cmp_data(2),bar_w,...
+    'FaceColor',free_c)
+hold on
+errorbar(x_list,mean_all_cmp_data,std_all_cmp_data,...
+    'CapSize',cap_size,'LineStyle','none',...
+    'Color','k')
+hold on
+for k = 1:size(all_cmp_data,1)
+    plot(x_list+x_bias,all_cmp_data(k,:),...
+        '-ok','MarkerFaceColor','w',...
+        'MarkerEdgeColor','k',...
+        'LineWidth',0.25,...
+        'MarkerSize',mk_size)
+end
+hold on
+plot(x_list,[0.017,0.017],'-k')
+text(mean(x_list),0.017,'*',...
+    'HorizontalAlignment','center',...
+    'VerticalAlignment','bottom')
+hold off
+
+box off
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+set(gca,'XTick',x_list)
+set(gca,'XTickLabel',{'Rec + Opto','Rec'})
+axis([0.3,2.7,0,0.02])
+set(gca,'XTickLabelRotation',30)
+
+ylabel({'Mean ΔF/F','Full sessions'})
+%% show pcs
+start_x = 0.32;
+start_y = 0.64;
+
+box_x = 0.05;
+box_y = 0.08;
+
+inter_x = 0.013;
+inter_y = 0.02;
+
+show_pca_num = [1,2,3,24,25];
+
+show_bias = 0;
+
+cmap_neu = flipud(cbrewer2('RdBu',1000));
+
+count = 1;
+for k = show_pca_num
+    %% load data
+    sel_op_pc = cellfun(@(x) x(:,k+show_bias),...
+        op_lmt_cell(:,1),'UniformOutput',false);
+    sel_free_pc = cellfun(@(x) x(:,k+show_bias),...
+        free_lmt_cell(:,1),'UniformOutput',false);
+    
+
+    pad_free_pc = -1*ones(size(sel_free_pc,1),pad_len);
+        
+    for m = 1:size(sel_free_pc,1)
+        pad_free_pc(m,1:length(sel_free_pc{m})) = sel_free_pc{m};
+    end
+    
+    pad_free_pc(pad_free_pc==-1) = NaN;
+
+    pad_op_pc = -1*ones(size(sel_op_pc,1),pad_len);
+        
+    for m = 1:size(sel_op_pc,1)
+        pad_op_pc(m,1:length(sel_op_pc{m})) = sel_op_pc{m};
+    end
+    
+    pad_op_pc(pad_op_pc==-1) = NaN;
+
+    %% show
+    temph = subplot('Position',[...
+        start_x+(count-1)*(box_x+inter_x),start_y,...
+        box_x,box_y]);
+    imagesc(pad_op_pc)
+    hold on
+    plot(op_self_mov_start_list(:,1),...
+        op_self_mov_start_list(:,2),'-k')
+    hold on
+    plot(op_self_mov_end_list(:,1),...
+        op_self_mov_end_list(:,2),'-k')
+    hold off
+
+    colormap(temph,[1,1,1;cmap_neu])
+
+    box off
+
+    set(gca,'YTick',[1,size(pad_op_pc,1)])
+    if k == 1
+        ylabel('Neural PC')
+    else
+        set(gca,'YTickLabel',[])
+    end
+
+    set(gca,'FontSize',6)
+    set(gca,'TickDir','out')
+    set(gca,'XTick',x_tick)
+    set(gca,'XTickLabel',[])
+
+    title(['PC ',num2str(k)])
+
+    temph = subplot('Position',[...
+        start_x+(count-1)*(box_x+inter_x),...
+        start_y-(box_y+inter_y),...
+        box_x,box_y]);
+    imagesc(pad_free_pc)
+    hold on
+    plot(free_self_mov_start_list(:,1),...
+        free_self_mov_start_list(:,2),'-k')
+    hold on
+    plot(free_self_mov_end_list(:,1),...
+        free_self_mov_end_list(:,2),'-k')
+    hold off
+
+    colormap(temph,[1,1,1;cmap_neu])
+
+    box off
+    
+    set(gca,'YTick',[1,size(pad_free_pc,1)])
+    if k == 1
+        ylabel('Neural PC')
+    else
+        set(gca,'YTickLabel',[])
+    end
+
+    set(gca,'FontSize',6)
+    set(gca,'TickDir','out')
+    set(gca,'XTick',x_tick)
+    set(gca,'XTickLabel',x_tick_label)
+    set(gca,'XTickLabelRotation',0)
+
+    xlabel('Time (s)')
+
+    count = count+1;
+    
+end
+
+% colorbar
+cbar_box_x = 0.006;
+cbar_box_y = 0.05;
+
+cbar_inter_x = 0.017;
+
+temph = subplot('Position',[...
+    start_x,...
+    start_y+box_y+cbar_inter_x,...
+    cbar_box_y,cbar_box_x]);
+imagesc(flipud((1:256)))
+colormap(temph,cmap_neu)
+set(gca,'XTick',[],'YTick',[])
+
+text(280,2,'1','FontSize',6,'VerticalAlignment','bottom')
+text(-50,2,'0','FontSize',6,'VerticalAlignment','bottom')
+
+text(128,-1,'Coefficient','FontSize',6,'Rotation',0,...
+    'HorizontalAlignment','center')
+
+%% compare variance explained, all no differences
+sel_pc_num = 25;
+op_var = cell2mat(cellfun(@(x) x(1:sel_pc_num)',...
+    op_lmt_cell(:,4),'UniformOutput',false));
+free_var = cell2mat(cellfun(@(x) x(1:sel_pc_num)',...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+op_pr_low = cell2mat(cellfun(@(x) sum(x(1:3))^2/sum(x(1:3).^2),...
+    op_lmt_cell(:,4),'UniformOutput',false));
+
+free_pr_low = cell2mat(cellfun(@(x) sum(x(1:3))^2/sum(x(1:3).^2),...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+pr_high_range = 10;
+op_pr_high = cell2mat(cellfun(@(x) ...
+    sum(x((end-pr_high_range):end))^2/...
+    sum(x((end-pr_high_range):end).*x((end-pr_high_range):end)),...
+    op_lmt_cell(:,4),'UniformOutput',false));
+
+free_pr_high = cell2mat(cellfun(@(x) ...
+    sum(x((end-pr_high_range):end))^2/...
+    sum(x((end-pr_high_range):end).^2),...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+op_h = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x, true),...
+    op_lmt_cell(:,4),'UniformOutput',false));
+
+free_h = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x, true),...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+op_h_low = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x(1:5), true),...
+    op_lmt_cell(:,4),'UniformOutput',false));
+
+free_h_low = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x(1:5), true),...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+h_high_range = 15:25;
+op_h_high = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x(h_high_range), true),...
+    op_lmt_cell(:,4),'UniformOutput',false));
+
+free_h_high = cell2mat(cellfun(@(x) ...
+    spectral_entropy(x(h_high_range), true),...
+    free_lmt_cell(:,4),'UniformOutput',false));
+
+%% compare autocorrelation t
+% op_auto_t = cell(size(op_lmt_cell,1),1);
+% for k = 1:size(op_auto_t,1)
+%     %%
+%     temppc = op_lmt_cell{k,1}';
+%     tempt = zeros(size(temppc,1),1);
+%     for m = 1:size(temppc,1)
+%         ttpc = temppc(m,:);
+%         try
+%             tau = autocorr_tau(ttpc, 30, 2);
+%             tempt(m,1) = tau;
+%         catch
+%             tempt(m,1) = nan;
+%         end
+%     end
+%     op_auto_t{k,1} = tempt';
+% end
+% 
+% free_auto_t = cell(size(free_lmt_cell,1),1);
+% for k = 1:size(free_auto_t,1)
+%     %%
+%     temppc = free_lmt_cell{k,1}';
+%     tempt = zeros(size(temppc,1),1);
+%     for m = 1:size(temppc,1)
+%         ttpc = temppc(m,:);
+%         try
+%             tau = autocorr_tau(ttpc, 30, 2);
+%             tempt(m,1) = tau;
+%         catch
+%             tempt(m,1) = nan;
+%         end
+%     end
+%     free_auto_t{k,1} = tempt';
+% end
+% 
+% %% PC2 opto higher significantly
+% op_auto_t_cut = cell2mat(cellfun(@(x) x(1:25),...
+%     op_auto_t,'UniformOutput',false));
+% 
+% free_auto_t_cut = cell2mat(cellfun(@(x) x(1:25),...
+%     free_auto_t,'UniformOutput',false));
+% 
+% op_sel = sum(double(isnan(op_auto_t_cut)),2)==0;
+% free_sel = sum(double(isnan(free_auto_t_cut)),2)==0;
+% 
+% op_auto_t_cut_sel = op_auto_t_cut(op_sel,:);
+% free_auto_t_cut_sel = free_auto_t_cut(free_sel,:);
+% 
+% mean_op_auto_t_cut_sel = mean(op_auto_t_cut_sel);
+% mean_free_auto_t_cut_sel = mean(free_auto_t_cut_sel);
+% 
+% std_op_auto_t_cut_sel = std(op_auto_t_cut_sel)./...
+%     sqrt(size(op_auto_t_cut_sel,1));
+% std_free_auto_t_cut_sel = std(free_auto_t_cut_sel)./...
+%     sqrt(size(free_auto_t_cut_sel,1));
+% 
+% stat_op_auto_t_cut_sel = op_auto_t_cut_sel';
+% stat_free_auto_t_cut_sel = free_auto_t_cut_sel';
+% 
+% stat_p_auto_t_cut_sel = {...
+%  '0.1608';...
+% '<0.0001****';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999';...
+% '>0.9999'};
+
+%% traj_complexity one by one, high freq ratio
+sel_range = [...
+    (1:1:25)',...
+    (1:1:25)',...
+    ];
+
+op_trajc_cell = cell(size(sel_range,1),1);
+free_trajc_cell = cell(size(sel_range,1),1);
+
+for k = 1:size(sel_range,1)
+
+    op_trajc = cell2mat(cellfun(@(x) ...
+        traj_complexity_fft(...
+        x(:,sel_range(k,1):sel_range(k,2))),...
+        op_lmt_cell(:,1),'UniformOutput',false));
+    
+    free_trajc = cell2mat(cellfun(@(x) ...
+        traj_complexity_fft(...
+        x(:,sel_range(k,1):sel_range(k,2))),...
+        free_lmt_cell(:,1),'UniformOutput',false));
+
+    op_trajc_cell{k,1} = op_trajc';
+    free_trajc_cell{k,1} = free_trajc';
+end
+
+stat_op_trajc_mat = cell2mat(op_trajc_cell);
+stat_free_trajc_mat = cell2mat(free_trajc_cell);
+
+op_trajc_mat = 100*stat_op_trajc_mat';
+free_trajc_mat = 100*stat_free_trajc_mat';
+
+mean_op_trajc_mat = mean(op_trajc_mat);
+mean_free_trajc_mat = mean(free_trajc_mat);
+
+std_op_trajc_mat = std(op_trajc_mat)./...
+    sqrt(size(op_trajc_mat,1));
+std_free_trajc_mat = std(free_trajc_mat)./...
+    sqrt(size(free_trajc_mat,1));
+
+stat_p_trajc_mat = {...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'0.9936';...
+'>0.9999';...
+'0.9677';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'>0.9999';...
+'0.7145';...
+'0.6418';...
+'0.9996';...
+'0.1261';...
+'0.1571';...
+'<0.0001****';...
+'<0.0001****'};
+
+%% compare pose parameters, paired speed
+loco_thres = 150;
+
+free_speed = cell(size(free_sort_fcf_cell,1),1);
+for k = 1:size(free_sort_fcf_cell,1)
+    temppose = free_sort_fcf_cell{k,3};
+    for m = 1:size(temppose,2)
+        temppose(:,m) = smooth(...
+            medfilt1(...
+            temppose(:,m),30),30);
+    end
+    
+    temp_speed = zeros(1,(size(temppose,2)/3));
+    for m = 1:size(temp_speed,2)
+        ttpose = temppose(:,((m-1)*3+1):(m*3));
+
+        tempv = sqrt(sum(diff(ttpose).^2,2))*fs;
+
+        temp_speed(1,m) = mean(tempv(tempv<loco_thres));
+    end
+    free_speed{k,1} = temp_speed;
+end
+
+free_speed = cell2mat(free_speed);
+
+op_speed = cell(size(op_sort_fcf_cell,1),1);
+for k = 1:size(op_sort_fcf_cell,1)
+    temppose = op_sort_fcf_cell{k,3};
+    for m = 1:size(temppose,2)
+        temppose(:,m) = smooth(...
+            medfilt1(...
+            temppose(:,m),30),30);
+    end
+    
+    temp_speed = zeros(1,(size(temppose,2)/3));
+    for m = 1:size(temp_speed,2)
+        ttpose = temppose(:,((m-1)*3+1):(m*3));
+
+        tempv = sqrt(sum(diff(ttpose).^2,2))*fs;
+
+        temp_speed(1,m) = mean(tempv(tempv<loco_thres));
+    end
+    op_speed{k,1} = temp_speed;
+end
+
+op_speed = cell2mat(op_speed);
+
+op_spl_name = split(op_sort_fcf_cell(:,1),'-');
+free_spl_name = split(free_sort_fcf_cell(:,1),'-');
+
+group_name = {...
+    '6tpmpfc';...
+    '7tpmpfc';...
+    '8tpmpfc';...
+    '9tpmpfc';...
+    '10tpmpfc';...
+    };
+
+op_group_data = zeros(size(group_name,1),size(op_speed,2));
+free_group_data = zeros(size(group_name,1),size(free_speed,2));
+
+for m = 1:size(group_name,1)
+    selop = strcmp(group_name{m,1},op_spl_name(:,3));
+    selfree = strcmp(group_name{m,1},free_spl_name(:,3));
+
+    selop_speed = op_speed(selop,:);
+    selfree_speed = free_speed(selfree,:);
+
+    op_group_data(m,:) = mean(selop_speed)/10;
+    free_group_data(m,:) = mean(selfree_speed)/10;
+end
+
+stat_op_group_data = op_group_data';
+stat_free_group_data = free_group_data';
+
+mean_op_group_data = mean(op_group_data);
+mean_free_group_data = mean(free_group_data);
+
+std_op_group_data = std(op_group_data)./sqrt(size(op_group_data,1));
+std_free_group_data = std(free_group_data)./sqrt(size(free_group_data,1));
+
+% stat
+p_list = zeros(1,size(op_group_data,2));
+for k = 1:size(op_group_data,2)
+    opdata = op_group_data(:,k);
+    freedata = free_group_data(:,k);
+
+    [h_norm_1,p_norm_1] = lillietest(opdata);
+    [h_norm_2,p_norm_2] = lillietest(freedata);
+
+    [h_var,p_var] = vartest2(opdata,freedata);
+
+    sum_h = h_norm_1+h_norm_2+h_var;
+
+    if sum_h==0
+        [h,p] = ttest(opdata,freedata);
+        disp('ttest')
+        disp(p)
+    else
+        [p,h] = signrank(opdata,freedata);
+        disp('signrank')
+        disp(p)
+    end
+    p_list(1,k) = p;
+end
+
+show_star_list = {...
+    0.05,1,'ns';...
+    0.01,0.05,'*';...
+    0.001,0.01,'**';...
+    0.0001,0.001,'***';...
+    0,0.0001,'****';...
+    };
+
+show_star_y = cell(size(p_list));
+for k = 1:length(p_list)
+    tempp = p_list(k);
+    for m = 1:size(show_star_list,1)
+        if show_star_list{m,1}<=tempp &&...
+                tempp<show_star_list{m,2}
+            show_star_y{k} = show_star_list{m,3};
+        end
+    end
+end
+%% show tau & freq ratio
+start_x = 0.67;
+start_y = 0.64;
+
+box_x = 0.32;
+box_y = 0.08;
+
+inter_x = 0.015;
+inter_y = 0.02;
+
+x_list = 1:25;
+x_bias = 0.22;
+
+
+x_list_left = x_list-x_bias;
+x_list_right = x_list+x_bias;
+
+bar_w = 0.23;
+cap_size = 1;
+x_bb = bar_w/2;
+mk_size = 1;
+
+subplot('Position',...
+    [start_x,start_y,box_x,box_y])
+% bar(x_list_left,mean_op_auto_t_cut_sel,bar_w,...
+%     'LineWidth',0.25,...
+%     'FaceColor',op_c)
+% hold on
+% bar(x_list_right,mean_free_auto_t_cut_sel,bar_w,...
+%     'LineWidth',0.25,...
+%     'FaceColor',free_c)
+% hold on
+% errorbar(x_list_left,mean_op_auto_t_cut_sel,...
+%     std_op_auto_t_cut_sel,'CapSize',cap_size,...
+%     'LineStyle','none',...
+%     'Color','k')
+% hold on
+% errorbar(x_list_right,mean_free_auto_t_cut_sel,...
+%     std_free_auto_t_cut_sel,'CapSize',cap_size,...
+%     'LineStyle','none',...
+%     'Color','k')
+% hold on
+% for k = 1:size(op_auto_t_cut_sel,1)
+%     plot(x_list_left+x_bb,op_auto_t_cut_sel(k,:),...
+%         'o','LineWidth',0.25,...
+%         'MarkerSize',mk_size,...
+%         'MarkerFaceColor',op_c,...
+%         'MarkerEdgeColor',op_c)
+%     hold on
+%     plot(x_list_right+x_bb,free_auto_t_cut_sel(k,:),...
+%         'o','LineWidth',0.25,...
+%         'MarkerSize',mk_size,...
+%         'MarkerFaceColor',free_c,...
+%         'MarkerEdgeColor',free_c)
+%     hold on
+% end
+% 
+% % show_y_p = 2.5;
+% % for k = 1:length(x_list_left)
+% %     plot([x_list_left(k),x_list_right(k)],...
+% %         [show_y_p,show_y_p],'k-',...
+% %         'LineWidth',0.25)
+% %     hold on
+% %     text(x_list(k),show_y_p,stat_p_auto_t_cut_sel{k},...
+% %         'FontSize',6,...
+% %         'Rotation',90)
+% % end
+% % hold off
+% 
+% show_y_p = 2.5;
+% plot([x_list_left(2),x_list_right(2)],...
+%         [show_y_p,show_y_p],'k-',...
+%         'LineWidth',0.25)
+% hold on
+% text(x_list(2),show_y_p,'****',...
+%         'FontSize',8,...
+%         'Rotation',90,...
+%         'HorizontalAlignment','left',...
+%         'VerticalAlignment','middle')
+% hold off
+% 
+% axis([0.3,25.7,0,3])
+% set(gca,'FontSize',6)
+% set(gca,'TickDir','out')
+% ylabel('Time constant τ (s)')
+% set(gca,'XTick',x_list)
+% set(gca,'XTickLabel',[])
+% box off
+% 
+% subplot('Position',...
+%     [start_x,start_y-(box_y+inter_y),box_x,box_y])
+bar(x_list_left,mean_op_trajc_mat,bar_w,...
+    'FaceColor',op_c)
+hold on
+bar(x_list_right,mean_free_trajc_mat,bar_w,...
+    'FaceColor',free_c)
+hold on
+errorbar(x_list_left,mean_op_trajc_mat,...
+    std_op_trajc_mat,'CapSize',cap_size,...
+    'LineStyle','none',...
+    'Color','k')
+hold on
+errorbar(x_list_right,mean_free_trajc_mat,...
+    std_free_trajc_mat,'CapSize',cap_size,...
+    'LineStyle','none',...
+    'Color','k')
+hold on
+for k = 1:size(op_trajc_mat,1)
+    plot(x_list_left+x_bb,op_trajc_mat(k,:),...
+        'o','LineWidth',0.25,...
+        'MarkerSize',mk_size,...
+        'MarkerFaceColor',op_c,...
+        'MarkerEdgeColor',op_c)
+    hold on
+    plot(x_list_right+x_bb,free_trajc_mat(k,:),...
+        'o','LineWidth',0.25,...
+        'MarkerSize',mk_size,...
+        'MarkerFaceColor',free_c,...
+        'MarkerEdgeColor',free_c)
+    hold on
+end
+
+show_y_p = 35;
+for k = [24,25]
+    plot([x_list_left(k),x_list_right(k)],...
+            [show_y_p,show_y_p],'k-',...
+            'LineWidth',0.25)
+    hold on
+    text(x_list(k),show_y_p,'****',...
+        'FontSize',8,...
+        'Rotation',90,...
+        'HorizontalAlignment','left',...
+        'VerticalAlignment','middle')
+    hold on
+end
+hold off
+
+axis([0.3,25.7,0,45])
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+ylabel({'High frequency ','ratio (%)'})
+set(gca,'XTick',x_list)
+set(gca,'XTickLabelRotation',0)
+xlabel('PCs')
+box off
+
+% show non-locomotion speed compare, cm/s
+x_list = 1:size(op_group_data,2);
+x_list_left = x_list-x_bias;
+x_list_right = x_list+x_bias;
+
+body_point_name = {...
+    'Nose';...
+    'Left ear';...
+    'Right ear';...
+    'Neck';...
+    'Left front limb';...
+    'Right front limb';...
+    'Left hind limb';...
+    'Right hind limb';...
+    'Left front paw';...
+    'Right front paw';...
+    'Left hind paw';...
+    'Right hind paw';...
+    'Back';...
+    'Tail base';...
+    'Mid tail';...
+    'Tip tail';...
+    };
+
+
+subplot('Position',...
+    [start_x,start_y-(box_y+inter_y),box_x,box_y])
+bar(x_list_left,mean_op_group_data,bar_w,...
+    'FaceColor',op_c)
+hold on
+bar(x_list_right,mean_free_group_data,bar_w,...
+    'FaceColor',free_c)
+errorbar(x_list_left,mean_op_group_data,...
+    std_op_group_data,'CapSize',cap_size,...
+    'LineStyle','none',...
+    'Color','k')
+hold on
+errorbar(x_list_right,mean_free_group_data,...
+    std_free_group_data,'CapSize',cap_size,...
+    'LineStyle','none',...
+    'Color','k')
+hold on
+
+mk_size = 1.5;
+
+show_y_pos = 5;
+
+for k = 1:size(op_group_data,2)
+    for m = 1:size(op_group_data,1)
+        plot([x_list_left(k)+x_bb,x_list_right(k)-x_bb],...
+            [op_group_data(m,k),free_group_data(m,k)],...
+            '-k','LineWidth',0.25)
+        hold on
+    end
+    if ~strcmp(show_star_y(k),'ns')
+        plot([x_list_left(k),x_list_right(k)],...
+            [show_y_pos,show_y_pos],'-k',...
+            'LineWidth',0.25)
+        hold on
+        text(x_list(k),show_y_pos,show_star_y(k),...
+            'HorizontalAlignment','center',...
+            'VerticalAlignment','bottom')
+        hold on
+    end
+end
+
+for k = 1:size(op_group_data,1)
+    plot(x_list_left+x_bb,op_group_data(k,:),...
+        'o','LineWidth',0.25,...
+        'MarkerSize',mk_size,...
+        'MarkerFaceColor','w',...
+        'MarkerEdgeColor','k')
+    hold on
+    plot(x_list_right-x_bb,free_group_data(k,:),...
+        'o','LineWidth',0.25,...
+        'MarkerSize',mk_size,...
+        'MarkerFaceColor','w',...
+        'MarkerEdgeColor','k')
+    hold on
+end
+hold off
+ylabel({'Non-locomotion','speed (cm/s)'})
+
+axis([0.3,16.7,0,8])
+
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+box off
+
+set(gca,'XTick',x_list)
+set(gca,'XTickLabel',body_point_name)
+%% dynamic analysis
+start_x = 0.04;
+start_y = 0.32;
+
+box_x = 0.14;
+box_y = box_x;
+
+inter_x = 0.012;
+
+quv_cmap_list = [free_c;op_c];
+
+nxpts = 15;
+nypts = 15;
+
+dy_title_list = {...
+    'PC 1-10, Rec + Opto';...
+    'PC 16-25, Rec + Opto';...
+    'PC 1-10, Rec';...
+    'PC 16-25, Rec';...
+    };
+
+curve_cmap = flipud(cbrewer2('Spectral',256));
+
+c_mk_size = 0.5;
+
+% op low
+sel_dy_idx = 1;
+subplot('Position',[...
+    start_x,start_y,box_x,box_y])
+% load variables
+z_dist = dy_data_cell{sel_dy_idx}.z_dist;
+z_dist_savelist = idx2savelist(z_dist);
+
+sel_0_savelist = z_dist_savelist(...
+    z_dist_savelist(:,3)==0,:);
+sel_0_savelist([1,end],:) = [];
+cut_pos = (sel_0_savelist(:,1)+sel_0_savelist(:,2))/2;
+
+start_pos = [1;(cut_pos+1)];
+end_pos = [cut_pos;z_dist_savelist(end,2)];
+
+savelist = [start_pos,end_pos];
+
+x_cell = cell(size(savelist,1),2);
+xhat_dist_lem = dy_data_cell{sel_dy_idx}.xhat_dist_lem;
+for k = 1:size(x_cell,1)
+    tempx = xhat_dist_lem(...
+        savelist(k,1):savelist(k,2),:)';
+    x_cell{k,1} = tempx;
+
+    tempdist = double(z_dist(...
+        savelist(k,1):savelist(k,2),:)');
+    x_cell{k,2} = tempdist;
+end
+% 生成网格点
+lim = max(dy_data_cell{sel_dy_idx}.xhat_dist_lem) + 1;
+
+xlim_range = [-1*lim(1),lim(1)];
+ylim_range = [-1*lim(2),lim(2)];
+
+x = linspace(xlim_range(1), xlim_range(2), nxpts);
+y = linspace(ylim_range(1), ylim_range(2), nypts);
+[X, Y] = meshgrid(x, y);
+
+% 组合网格点
+xy = [X(:), Y(:)];
+
+% 计算每个 (x, y) 位置的每个状态的概率，并找到最大概率对应的状态
+z = zeros(size(xy, 1), 1); % 初始化 z，用于存储每个点的状态
+
+for i = 1:size(xy, 1)
+    % 对每个点计算状态得分
+    scores = xy(i, :) * ...
+        dy_data_cell{sel_dy_idx}.model_transitions_s_T' + ...
+        dy_data_cell{sel_dy_idx}.model_transitions_r;
+    % 找到得分最高的状态索引
+    [~, z(i)] = max(scores);
+end
+
+% 遍历每个动态系统的参数 (A, b)
+for k = 1:length(dy_data_cell{sel_dy_idx}.model_dynamics_As)
+    A = reshape(dy_data_cell{sel_dy_idx}.model_dynamics_As(k,:,:),2,2)';
+    b = dy_data_cell{sel_dy_idx}.model_dynamics_bs(k,:);
+    
+    % 计算每个 (x, y) 的 dx/dt 和 dy/dt
+    dxydt_m = xy * A + ones(size(xy,1),1)*b - xy;
+
+    % 找到属于状态 k 的点
+    zk = (z == k);
+
+    % 如果状态 k 中有点
+    if sum(zk) > 0
+        % 绘制速度场矢量
+        quiver(xy(zk, 1), xy(zk, 2), ...
+               dxydt_m(zk, 1), dxydt_m(zk, 2),...
+               'Color',quv_cmap_list(k,:));
+        hold on
+    end
+end
+hold on
+
+XL = get(gca,'xlim'); XR = XL(2);
+YL = get(gca,'ylim'); YT = YL(2);
+
+plot(XL,YT*ones(size(XL)),...
+    'color', 'k','linewidth',0.25)
+hold on
+plot(XR*ones(size(YL)),YL,...
+    'color', 'k','linewidth',0.25)
+hold on
+
+% sel_show_idx = [...%15,29,38
+%     1,2,3,4,5,...
+%     6,7,8,9,10,...
+%     11,12,13,14,15,...
+%     16,17,18,19,20,...
+%     21,22,23,24,25,...
+%     26,27,28,29,30,...
+%     31,32,33,34,35,...
+%     36,37,38,39,40,...
+%     ];
+% figure
+% for k = 1:length(sel_show_idx)
+%     subplot(5,8,k)
+%     plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+%         2*x_cell{sel_show_idx(k),1}(2,:),...
+%         '-')
+%     hold on
+%     scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+%         2*x_cell{sel_show_idx(k),1}(2,:),...
+%         ones(size(x_cell{sel_show_idx(k),1},2),1),...
+%         mat2gray(imresize(curve_cmap,...
+%         [size(x_cell{sel_show_idx(k),1},2),3])))
+%     title(sel_show_idx(k))
+%     hold off
+% end
+
+sel_show_idx = [...
+    1,14,15];
+
+for k = 1:length(sel_show_idx)
+    plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        '-','LineWidth',0.25,...
+        'Color',0.7*ones(1,3))
+    hold on
+    scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        c_mk_size*ones(size(x_cell{sel_show_idx(k),1},2),1),...
+        mat2gray(imresize(curve_cmap,...
+        [size(x_cell{sel_show_idx(k),1},2),3])))
+    hold on
+end
+hold off
+
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+
+ylabel('x_2')
+xlabel('x_1')
+
+title(dy_title_list{sel_dy_idx})
+
+box off
+
+% op high
+sel_dy_idx = 2;
+subplot('Position',[...
+    start_x+1*(box_x+inter_x),start_y,box_x,box_y])
+% load variables
+z_dist = dy_data_cell{sel_dy_idx}.z_dist;
+z_dist_savelist = idx2savelist(z_dist);
+
+sel_0_savelist = z_dist_savelist(...
+    z_dist_savelist(:,3)==0,:);
+sel_0_savelist([1,end],:) = [];
+cut_pos = (sel_0_savelist(:,1)+sel_0_savelist(:,2))/2;
+
+start_pos = [1;(cut_pos+1)];
+end_pos = [cut_pos;z_dist_savelist(end,2)];
+
+savelist = [start_pos,end_pos];
+
+x_cell = cell(size(savelist,1),2);
+xhat_dist_lem = dy_data_cell{sel_dy_idx}.xhat_dist_lem;
+for k = 1:size(x_cell,1)
+    tempx = xhat_dist_lem(...
+        savelist(k,1):savelist(k,2),:)';
+    x_cell{k,1} = tempx;
+
+    tempdist = double(z_dist(...
+        savelist(k,1):savelist(k,2),:)');
+    x_cell{k,2} = tempdist;
+end
+% 生成网格点
+lim = max(dy_data_cell{sel_dy_idx}.xhat_dist_lem) + 1;
+
+xlim_range = [-1*lim(1),lim(1)];
+ylim_range = [-1*lim(2),lim(2)];
+
+x = linspace(xlim_range(1), xlim_range(2), nxpts);
+y = linspace(ylim_range(1), ylim_range(2), nypts);
+[X, Y] = meshgrid(x, y);
+
+% 组合网格点
+xy = [X(:), Y(:)];
+
+% 计算每个 (x, y) 位置的每个状态的概率，并找到最大概率对应的状态
+z = zeros(size(xy, 1), 1); % 初始化 z，用于存储每个点的状态
+
+for i = 1:size(xy, 1)
+    % 对每个点计算状态得分
+    scores = xy(i, :) * ...
+        dy_data_cell{sel_dy_idx}.model_transitions_s_T' + ...
+        dy_data_cell{sel_dy_idx}.model_transitions_r;
+    % 找到得分最高的状态索引
+    [~, z(i)] = max(scores);
+end
+
+% 遍历每个动态系统的参数 (A, b)
+for k = 1:length(dy_data_cell{sel_dy_idx}.model_dynamics_As)
+    A = reshape(dy_data_cell{sel_dy_idx}.model_dynamics_As(k,:,:),2,2)';
+    b = dy_data_cell{sel_dy_idx}.model_dynamics_bs(k,:);
+    
+    % 计算每个 (x, y) 的 dx/dt 和 dy/dt
+    dxydt_m = xy * A + ones(size(xy,1),1)*b - xy;
+
+    % 找到属于状态 k 的点
+    zk = (z == k);
+
+    % 如果状态 k 中有点
+    if sum(zk) > 0
+        % 绘制速度场矢量
+        quiver(xy(zk, 1), xy(zk, 2), ...
+               dxydt_m(zk, 1), dxydt_m(zk, 2),...
+               'Color',quv_cmap_list(k,:));
+        hold on
+    end
+end
+hold on
+
+XL = get(gca,'xlim'); XR = XL(2);
+YL = get(gca,'ylim'); YT = YL(2);
+
+plot(XL,YT*ones(size(XL)),...
+    'color', 'k','linewidth',0.25)
+hold on
+plot(XR*ones(size(YL)),YL,...
+    'color', 'k','linewidth',0.25)
+hold on
+
+sel_show_idx = [...%4,13,26
+    14];
+
+for k = 1:length(sel_show_idx)
+    plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        '-','LineWidth',0.25,...
+        'Color',0.7*ones(1,3))
+    hold on
+    scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        c_mk_size*ones(size(x_cell{sel_show_idx(k),1},2),1),...
+        mat2gray(imresize(curve_cmap,...
+        [size(x_cell{sel_show_idx(k),1},2),3])))
+    hold on
+end
+hold off
+
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+
+set(gca,'YTickLabel',[])
+
+box off
+
+xlabel('x_1')
+
+title(dy_title_list{sel_dy_idx})
+
+
+% free low
+sel_dy_idx = 3;
+subplot('Position',[...
+    start_x+2*(box_x+inter_x),start_y,box_x,box_y])
+% load variables
+z_dist = dy_data_cell{sel_dy_idx}.z_dist;
+z_dist_savelist = idx2savelist(z_dist);
+
+sel_0_savelist = z_dist_savelist(...
+    z_dist_savelist(:,3)==0,:);
+sel_0_savelist([1,end],:) = [];
+cut_pos = (sel_0_savelist(:,1)+sel_0_savelist(:,2))/2;
+
+start_pos = [1;(cut_pos+1)];
+end_pos = [cut_pos;z_dist_savelist(end,2)];
+
+savelist = [start_pos,end_pos];
+
+x_cell = cell(size(savelist,1),2);
+xhat_dist_lem = dy_data_cell{sel_dy_idx}.xhat_dist_lem;
+for k = 1:size(x_cell,1)
+    tempx = xhat_dist_lem(...
+        savelist(k,1):savelist(k,2),:)';
+    x_cell{k,1} = tempx;
+
+    tempdist = double(z_dist(...
+        savelist(k,1):savelist(k,2),:)');
+    x_cell{k,2} = tempdist;
+end
+% 生成网格点
+lim = max(dy_data_cell{sel_dy_idx}.xhat_dist_lem) + 1;
+
+xlim_range = [-1*lim(1),lim(1)];
+ylim_range = [-1*lim(2),lim(2)];
+
+x = linspace(xlim_range(1), xlim_range(2), nxpts);
+y = linspace(ylim_range(1), ylim_range(2), nypts);
+[X, Y] = meshgrid(x, y);
+
+% 组合网格点
+xy = [X(:), Y(:)];
+
+% 计算每个 (x, y) 位置的每个状态的概率，并找到最大概率对应的状态
+z = zeros(size(xy, 1), 1); % 初始化 z，用于存储每个点的状态
+
+for i = 1:size(xy, 1)
+    % 对每个点计算状态得分
+    scores = xy(i, :) * ...
+        dy_data_cell{sel_dy_idx}.model_transitions_s_T' + ...
+        dy_data_cell{sel_dy_idx}.model_transitions_r;
+    % 找到得分最高的状态索引
+    [~, z(i)] = max(scores);
+end
+
+% 遍历每个动态系统的参数 (A, b)
+for k = 1:length(dy_data_cell{sel_dy_idx}.model_dynamics_As)
+    A = reshape(dy_data_cell{sel_dy_idx}.model_dynamics_As(k,:,:),2,2)';
+    b = dy_data_cell{sel_dy_idx}.model_dynamics_bs(k,:);
+    
+    % 计算每个 (x, y) 的 dx/dt 和 dy/dt
+    dxydt_m = xy * A + ones(size(xy,1),1)*b - xy;
+
+    % 找到属于状态 k 的点
+    zk = (z == k);
+
+    % 如果状态 k 中有点
+    if sum(zk) > 0
+        % 绘制速度场矢量
+        quiver(xy(zk, 1), xy(zk, 2), ...
+               dxydt_m(zk, 1), dxydt_m(zk, 2),...
+               'Color',quv_cmap_list(k,:));
+        hold on
+    end
+end
+hold on
+
+XL = get(gca,'xlim'); XR = XL(2);
+YL = get(gca,'ylim'); YT = YL(2);
+
+plot(XL,YT*ones(size(XL)),...
+    'color', 'k','linewidth',0.25)
+hold on
+plot(XR*ones(size(YL)),YL,...
+    'color', 'k','linewidth',0.25)
+hold on
+
+% sel_show_idx = [...%15,29,38
+%     1,2,3,4,5,...
+%     6,7,8,9,10,...
+%     11,12,13,14,15,...
+%     16,17,18,19,20,...
+%     21,22,23,24,25,...
+%     26,27,28,29,30,...
+%     31,32,33,34,35,...
+%     36,37,38,39,40,...
+%     ];
+% figure
+% for k = 1:length(sel_show_idx)
+%     subplot(5,8,k)
+%     plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+%         2*x_cell{sel_show_idx(k),1}(2,:),...
+%         '-')
+%     hold on
+%     scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+%         2*x_cell{sel_show_idx(k),1}(2,:),...
+%         ones(size(x_cell{sel_show_idx(k),1},2),1),...
+%         mat2gray(imresize(curve_cmap,...
+%         [size(x_cell{sel_show_idx(k),1},2),3])))
+%     title(sel_show_idx(k))
+%     hold off
+% end
+
+sel_show_idx = [...
+    19,28,35];
+
+for k = 1:length(sel_show_idx)
+    plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        '-','LineWidth',0.25,...
+        'Color',0.7*ones(1,3))
+    hold on
+    scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        c_mk_size*ones(size(x_cell{sel_show_idx(k),1},2),1),...
+        mat2gray(imresize(curve_cmap,...
+        [size(x_cell{sel_show_idx(k),1},2),3])))
+    hold on
+end
+hold off
+
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+
+set(gca,'YTickLabel',[])
+
+box off
+
+xlabel('x_1')
+
+title(dy_title_list{sel_dy_idx})
+
+% free high
+sel_dy_idx = 4;
+subplot('Position',[...
+    start_x+3*(box_x+inter_x),start_y,box_x,box_y])
+% load variables
+z_dist = dy_data_cell{sel_dy_idx}.z_dist;
+z_dist_savelist = idx2savelist(z_dist);
+
+sel_0_savelist = z_dist_savelist(...
+    z_dist_savelist(:,3)==0,:);
+sel_0_savelist([1,end],:) = [];
+cut_pos = (sel_0_savelist(:,1)+sel_0_savelist(:,2))/2;
+
+start_pos = [1;(cut_pos+1)];
+end_pos = [cut_pos;z_dist_savelist(end,2)];
+
+savelist = [start_pos,end_pos];
+
+x_cell = cell(size(savelist,1),2);
+xhat_dist_lem = dy_data_cell{sel_dy_idx}.xhat_dist_lem;
+for k = 1:size(x_cell,1)
+    tempx = xhat_dist_lem(...
+        savelist(k,1):savelist(k,2),:)';
+    x_cell{k,1} = tempx;
+
+    tempdist = double(z_dist(...
+        savelist(k,1):savelist(k,2),:)');
+    x_cell{k,2} = tempdist;
+end
+% 生成网格点
+lim = max(dy_data_cell{sel_dy_idx}.xhat_dist_lem) + 1;
+
+xlim_range = [-1*lim(1),lim(1)];
+ylim_range = [-1*lim(2),lim(2)];
+
+x = linspace(xlim_range(1), xlim_range(2), nxpts);
+y = linspace(ylim_range(1), ylim_range(2), nypts);
+[X, Y] = meshgrid(x, y);
+
+% 组合网格点
+xy = [X(:), Y(:)];
+
+% 计算每个 (x, y) 位置的每个状态的概率，并找到最大概率对应的状态
+z = zeros(size(xy, 1), 1); % 初始化 z，用于存储每个点的状态
+
+for i = 1:size(xy, 1)
+    % 对每个点计算状态得分
+    scores = xy(i, :) * ...
+        dy_data_cell{sel_dy_idx}.model_transitions_s_T' + ...
+        dy_data_cell{sel_dy_idx}.model_transitions_r;
+    % 找到得分最高的状态索引
+    [~, z(i)] = max(scores);
+end
+
+% 遍历每个动态系统的参数 (A, b)
+for k = 1:length(dy_data_cell{sel_dy_idx}.model_dynamics_As)
+    A = reshape(dy_data_cell{sel_dy_idx}.model_dynamics_As(k,:,:),2,2)';
+    b = dy_data_cell{sel_dy_idx}.model_dynamics_bs(k,:);
+    
+    % 计算每个 (x, y) 的 dx/dt 和 dy/dt
+    dxydt_m = xy * A + ones(size(xy,1),1)*b - xy;
+
+    % 找到属于状态 k 的点
+    zk = (z == k);
+
+    % 如果状态 k 中有点
+    if sum(zk) > 0
+        % 绘制速度场矢量
+        quiver(xy(zk, 1), xy(zk, 2), ...
+               dxydt_m(zk, 1), dxydt_m(zk, 2),...
+               'Color',quv_cmap_list(k,:));
+        hold on
+    end
+end
+hold on
+
+XL = get(gca,'xlim'); XR = XL(2);
+YL = get(gca,'ylim'); YT = YL(2);
+
+plot(XL,YT*ones(size(XL)),...
+    'color', 'k','linewidth',0.25)
+hold on
+plot(XR*ones(size(YL)),YL,...
+    'color', 'k','linewidth',0.25)
+hold on
+
+sel_show_idx = [...%3,9,15,28,29,35,38
+    28];
+
+for k = 1:length(sel_show_idx)
+    plot(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        '-','LineWidth',0.25,...
+        'Color',0.7*ones(1,3))
+    hold on
+    scatter(2*x_cell{sel_show_idx(k),1}(1,:),...
+        2*x_cell{sel_show_idx(k),1}(2,:),...
+        c_mk_size*ones(size(x_cell{sel_show_idx(k),1},2),1),...
+        mat2gray(imresize(curve_cmap,...
+        [size(x_cell{sel_show_idx(k),1},2),3])))
+    hold on
+end
+hold off
+
+set(gca,'FontSize',6)
+set(gca,'TickDir','out')
+
+set(gca,'YTickLabel',[])
+
+box off
+
+xlabel('x_1')
+
+title(dy_title_list{sel_dy_idx})
+
+% colorbar
+
+%% mesostasis analysis comparison
+
+
+
+%% L exp
+low_op_sort_pca_l_mat = ...
+    cellfun(@(x) lyapunovExponent(x(60:(end-60),:)',30),...
+    op_lmt_cell(:,1));
+
+low_free_sort_pca_l_mat = ...
+    cellfun(@(x) lyapunovExponent(x',30),...
+    free_lmt_cell(:,1));
+
+high_op_sort_pca_l_mat = ...
+    cellfun(@(x) lyapunovExponent(x(:,16:25)',30),...
+    op_lmt_cell(:,1));
+
+high_free_sort_pca_l_mat = ...
+    cellfun(@(x) lyapunovExponent(x(:,16:25)',30),...
+    free_lmt_cell(:,1));
+
+mean_low_op_sort_pca_l_mat = mean(low_op_sort_pca_l_mat);
+mean_low_free_sort_pca_l_mat = mean(low_free_sort_pca_l_mat);
+mean_high_op_sort_pca_l_mat = mean(high_op_sort_pca_l_mat);
+mean_high_free_sort_pca_l_mat = mean(high_free_sort_pca_l_mat);
+
+cmp_pair_name = {...
+    '6tpmpfc';...
+    '7tpmpfc';...
+    '8tpmpfc';...
+    '9tpmpfc';...
+    '10tpmpfc';...
+    };
+
+cmp_group_name = {...
+    'op';...
+    'free'};
+
+all_cmp_l = zeros(size(cmp_pair_name,1),...
+    size(cmp_group_name,1));
+
+op_splname = split(op_sort_fcf_cell(:,1),'-');
+free_splname = split(free_sort_fcf_cell(:,1),'-');
+
+for m = 1:size(all_cmp_l,1)
+    op_selidx = strcmp(...
+        cmp_pair_name{m},op_splname(:,3));
+    free_selidx = strcmp(...
+        cmp_pair_name{m},free_splname(:,3));
+    
+    all_cmp_l(m,1) = mean(op_sort_pca_l_mat(op_selidx,:));
+    all_cmp_l(m,2) = mean(free_sort_pca_l_mat(free_selidx,:));
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
