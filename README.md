@@ -1,4 +1,4 @@
-# behavior_timescales
+# behavioral_timescales
 
 Analysis and modeling code accompanying **Distributed cortical dynamics organize behavior across timescales**.
 
@@ -20,11 +20,12 @@ Supporting analyses include single-neuron encoding, CEBRA neural-behavioral embe
 ## Repository contents
 
 ```text
-behavior_timescales/
+behavioral_timescales/
 ├── README.md
 ├── LICENSE
-├── demo/                       # GIF visualizations
+├── demo/                       # Small synthetic recording and GIF visualizations
 ├── matlab/
+│   ├── run_reviewer_demo.m     # Self-contained demo and processed-data entry point
 │   ├── min_demo_reproduce_lmt.m # Introductory social-episode analysis
 │   ├── process_steps/          # Preprocessing and analysis scripts
 │   ├── function/               # Helper functions and bundled toolboxes
@@ -39,6 +40,7 @@ Some filenames retain historical terminology, including `min_demo_reproduce_lmt.
 
 | Component | Contents and entry points |
 | --- | --- |
+| Reviewer demo | [`matlab/run_reviewer_demo.m`](matlab/run_reviewer_demo.m) with the bundled [synthetic data](demo/reviewer_demo_data.csv). |
 | Introductory MATLAB analysis | `matlab/min_demo_reproduce_lmt.m`: loads synchronized data, extracts social interaction episodes, aligns movement and sequence labels, and visualizes neural principal components. |
 | Preprocessing and behavioral analysis | `matlab/process_steps/`: 2D pose merging, 3D reconstruction, BeA processing, neural-behavioral synchronization, resampling and filtering, sequence matching, episode extraction, linear fitting, DTAK clustering, and GTW alignment. |
 | Figure generation | `matlab/figs/`: `fig*.m` and `SM_fig*.m` scripts for main and supplementary analyses, with supporting code. |
@@ -107,11 +109,11 @@ subject_coords = subject_pose.coords3d;
 partner_coords = partner_pose.coords3d;
 ```
 
-## Environment and dependencies
+## System requirements
 
-The earlier repository documentation specified MATLAB R2023a or later and Python 3.10 or later. Exact tested package versions are not recorded in this checkout; these version statements are starting points for setup rather than a verified compatibility matrix.
+**Reviewer demo.** Tested on Windows 11 (build 26200) with MATLAB **R2024b Update 6** and Statistics and Machine Learning Toolbox **24.2**. The demo runs on a CPU and requires a MATLAB licence. It uses the bundled synthetic CSV and requires no Python environment, GPU, MEX compilation, or data download. Earlier MATLAB releases and other operating systems have not been tested for this demo.
 
-For the introductory MATLAB script, install **Statistics and Machine Learning Toolbox** (`pca`) and **Image Processing Toolbox** (`mat2gray`). Additional analyses can require Signal Processing Toolbox, Optimization Toolbox, Predictive Maintenance Toolbox, and Deep Learning Toolbox, depending on the functions used. Bundled BeA, GTW, and other helper code is under `matlab/function/` and `matlab/figs/function/`; some bundled MEX binaries are platform-specific.
+**Manuscript workflows.** Historical setup guidance specifies MATLAB R2023a or later and Python 3.10 or later. The original MATLAB and Python runtime versions could not be verified for every workflow. The historical MATLAB introductory script additionally uses Image Processing Toolbox (`mat2gray`). Other scripts can require Signal Processing Toolbox, Optimization Toolbox, Predictive Maintenance Toolbox (`lyapunovExponent`), and Deep Learning Toolbox. Bundled BeA and GTW code includes platform-specific MEX binaries that may need recompilation on other systems.
 
 Python dependencies depend on the selected module:
 
@@ -121,24 +123,52 @@ Python dependencies depend on the selected module:
 | rSLDS (`python/rslds/`) | `ssm`, `autograd`, `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `seaborn`, `tqdm` |
 | NPC-EDREN (`python/npc_edren/`) | `brainpy`, `brainpy_datasets`, `jax`, `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `tqdm` |
 
-Use the installation instructions for [CEBRA](https://cebra.ai/docs/), [the Linderman lab's `ssm`](https://github.com/lindermanlab/ssm), and [BrainPy](https://github.com/brainpy/BrainPy) when setting up the corresponding module. The CEBRA training scripts select `device='cuda'`, so their current configuration requires a CUDA-capable PyTorch environment. Reservoir scripts select their computational platform within the script. Record the versions used for any reproduced analysis.
+Archived CEBRA checkpoints report **CEBRA 0.4.0**, **PyTorch 2.3.0+cu121**, **NumPy 1.24.4**, and **scikit-learn 1.3.2**. CEBRA training scripts select `device='cuda'` and require a compatible NVIDIA GPU and PyTorch build. The study's local `ssm` source declared version **0.0.1**. Study records also identify **BeA 0.7.1**, MATLAB File Exchange **UMAP 4.4**, and **GraphPad Prism 8.0**. For scripts calling `run_umap`, install the [MATLAB File Exchange implementation](https://www.mathworks.com/matlabcentral/fileexchange/71902-uniform-manifold-approximation-and-projection-umap) and add it to the MATLAB path. Exact versions of other optional packages, including the original BrainPy/JAX environment, are not recorded for all workflows. The Python modules have not been validated in a clean environment for this release.
 
-## Getting started
+## Installation guide
 
-1. Download and extract the processed analysis data. Confirm that matching neural, pose, movement, sequence, and distance files are available for each selected recording.
-2. Open `matlab/min_demo_reproduce_lmt.m`. In its path-configuration section, set `rootpath` to your local data location and set `beh_neu_path` to the folder containing the processed MAT files. Review the historical `rmpath` entries for your local setup.
-3. Set MATLAB's current folder to the repository's `matlab/` directory so that the script's `addpath(genpath(pwd))` includes its helpers, then run:
+1. Download and extract the repository from [GitHub](https://github.com/YNCris/behavioral_timescales), or run `git clone https://github.com/YNCris/behavioral_timescales.git`.
+2. Install MATLAB and Statistics and Machine Learning Toolbox using the MathWorks installer. Open MATLAB, set its current folder to the repository root, and run `addpath(fullfile(pwd, 'matlab'))`.
 
-   ```matlab
-   min_demo_reproduce_lmt
-   ```
+**Typical installation time on a desktop.** Budget about **1–2 minutes** for reviewer-demo setup once the repository has been downloaded and MATLAB with the required toolbox is installed. This is an estimate for extracting the code, opening it, and setting the MATLAB path. The MATLAB/toolbox installer and repository download were not timed and depend on the connection, licence setup, and machine.
 
-4. Inspect the episode-aligned movement and sequence visualization and the neural-PC plots. The script uses a 30 Hz analysis timebase, selecting proximity-defined interaction periods of 2–10 seconds with 5-second flanking periods.
-5. For additional analyses, select a preprocessing, modeling, or figure script and configure its input and output paths. Python scripts likewise contain `rootpath`, `beh_neu_path`, or `savepath` settings that must point to your data and output folders.
+For optional manuscript workflows, install the corresponding dependencies from the table above in a separate Python environment. Follow the upstream installation guides for [CEBRA](https://cebra.ai/docs/), [`ssm`](https://github.com/lindermanlab/ssm), and [BrainPy](https://github.com/brainpy/BrainPy). Reservoir scripts select their computational platform in the script. Record the package versions used for any reproduction run.
 
-The introductory script illustrates social-episode extraction and PCA analysis. Reproducing all manuscript results additionally requires the relevant model outputs, recording conditions, and figure scripts. Runtime depends on the selected data and analysis; full reproduction has not been benchmarked here.
+## Reviewer demo
 
-Many scripts retain laboratory-specific Windows drive paths or Linux paths, and some use historical data-folder names such as `beh_neu_20240412` and `beh_neu_20250918`. Configure paths within each selected script before running it. Processed-data analyses can be run independently of raw-data preprocessing when their required inputs are already available.
+From the repository root in MATLAB, run:
+
+```matlab
+addpath(fullfile(pwd, 'matlab'));
+run_reviewer_demo
+```
+
+The bundled CSV contains synthetic neural traces for eight channels and a binary proximity label. The demo resamples the synthetic recording to 30 Hz, selects 2–10 s close bouts flanked by 5 s of far time on either side, and computes normalized temporal PCs separately for each episode.
+
+**Expected output.** The console reports **3 episodes**. The `reviewer_demo_output/` folder contains `episodes.csv` with close durations of **3, 4, and 5 s** and `temporal_pcs.png` with six PC heatmaps. The vertical dotted line marks close onset and black dots mark the transition back to far. PCA axes can differ in sign across implementations. The example exercises episode extraction and PCA on synthetic data.
+
+**Expected runtime on a desktop.** Allow about **one minute** for the demo command and MATLAB startup. A Windows 11 run on an Intel Core i9-14900K took **10.6 s** from function entry through PNG export and **58.7 s** for the full `matlab -batch` invocation.
+
+## Instructions for use and manuscript reproduction
+
+To analyze your own synchronized, processed recordings, put matching `free*-neu.mat` and `*-distance-free.mat` files in one directory. The neural file must contain `dff_smo_Fc` (neurons × frames) and `dist_data{2}` must contain one binary proximity label per frame (0 = far, 1 = close). The files must share a recording ID and use a 30 Hz timebase. From the repository root, run:
+
+```matlab
+addpath(fullfile(pwd, 'matlab'));
+run_reviewer_demo('/path/to/processed_data', '/path/to/output')
+```
+
+For the original study data, start with the processed Figshare archive listed under [Data access](#data-access). The reviewer command produces episode summaries and PC heatmaps. To reproduce analyses that also use poses, movement motifs, or sequences, provide the matching files described above and use the original scripts:
+
+| Analysis | Entry point |
+| --- | --- |
+| Episode-aligned neural PCs with behavioral labels | [`matlab/min_demo_reproduce_lmt.m`](matlab/min_demo_reproduce_lmt.m) |
+| Full-session and episode-level neural embeddings | [`SM_fig2_v1.m`](matlab/figs/SM_fig2_v1.m) and [`SM_fig1_v1.m`](matlab/figs/SM_fig1_v1.m) |
+| GTW and behavioral alignment | [`step18_gtw_inner_clus.m`](matlab/process_steps/step18_gtw_inner_clus.m) |
+| CEBRA and decoding | [`python/bl_bert/`](python/bl_bert/) and [`SM_fig_cebra_quantification_v1.m`](matlab/figs/SM_fig_cebra_quantification_v1.m) |
+| rSLDS and NPC-EDREN | [`python/rslds/`](python/rslds/) and [`python/npc_edren/`](python/npc_edren/) |
+
+Original scripts may use laboratory-specific paths. Set `rootpath`, `beh_neu_path`, and any output paths to your local folders before running them, and remove any historical `rmpath` entries that refer to the original machine. Use the manuscript Methods and Supplementary Methods for analysis parameters and conditions. Reproduction of all manuscript results has not been benchmarked end to end.
 
 ## Demonstrations
 
